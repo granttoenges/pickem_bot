@@ -1,20 +1,26 @@
-import { Duration, RemovalPolicy, Stack, StackProps } from "aws-cdk-lib";
+import { CfnOutput, CfnParameter, Duration, RemovalPolicy, SecretValue, Stack, StackProps } from "aws-cdk-lib";
+import { CfnApp, CfnBranch } from "aws-cdk-lib/aws-amplify";
 import { AttributeType, BillingMode, Table } from "aws-cdk-lib/aws-dynamodb";
 import { Rule, Schedule } from "aws-cdk-lib/aws-events";
 import { LambdaFunction } from "aws-cdk-lib/aws-events-targets";
 import { DockerImageCode, DockerImageFunction, Runtime } from "aws-cdk-lib/aws-lambda";
 import { NodejsFunction } from "aws-cdk-lib/aws-lambda-nodejs";
-import { UserPool, UserPoolClient, UserPoolClientIdentityProvider, UserPoolGroup } from "aws-cdk-lib/aws-cognito";
+import { CfnUserPoolUser, CfnUserPoolUserToGroupAttachment, UserPool, UserPoolClient, UserPoolClientIdentityProvider, UserPoolGroup } from "aws-cdk-lib/aws-cognito";
 import { HttpApi, CorsHttpMethod } from "aws-cdk-lib/aws-apigatewayv2";
 import { HttpLambdaIntegration } from "aws-cdk-lib/aws-apigatewayv2-integrations";
 import { HttpUserPoolAuthorizer } from "aws-cdk-lib/aws-apigatewayv2-authorizers";
 import { Construct } from "constructs";
+import { Secret } from "aws-cdk-lib/aws-secretsmanager";
 
 export class PickemStack extends Stack {
   constructor(scope: Construct, id: string, props?: StackProps) {
     super(scope, id, props);
+    const resourcePrefix = "pickem-bot-v1";
+    const firstAdminEmail = process.env.FIRST_ADMIN_EMAIL;
+    const enableAmplify = process.env.ENABLE_AMPLIFY === "true";
 
     const table = new Table(this, "PickemTable", {
+      tableName: `${resourcePrefix}-table`,
       partitionKey: { name: "pk", type: AttributeType.STRING },
       sortKey: { name: "sk", type: AttributeType.STRING },
       billingMode: BillingMode.PAY_PER_REQUEST,
@@ -22,18 +28,20 @@ export class PickemStack extends Stack {
     });
 
     const userPool = new UserPool(this, "PickemUserPool", {
+      userPoolName: `${resourcePrefix}-users`,
       selfSignUpEnabled: false,
       signInAliases: { email: true },
       removalPolicy: RemovalPolicy.RETAIN
     });
 
     const userPoolClient = new UserPoolClient(this, "PickemUserPoolClient", {
+      userPoolClientName: `${resourcePrefix}-web-client`,
       userPool,
       authFlows: { userPassword: true, userSrp: true },
       supportedIdentityProviders: [UserPoolClientIdentityProvider.COGNITO]
     });
 
-    new UserPoolGroup(this, "AdminGroup", {
+    const adminGroup = new UserPoolGroup(this, "AdminGroup", {
       userPool,
       groupName: "admin"
     });
@@ -43,8 +51,28 @@ export class PickemStack extends Stack {
       groupName: "player"
     });
 
+    if (firstAdminEmail) {
+      const firstAdmin = new CfnUserPoolUser(this, "FirstAdminUser", {
+        userPoolId: userPool.userPoolId,
+        username: firstAdminEmail,
+        desiredDeliveryMediums: ["EMAIL"],
+        userAttributes: [
+          { name: "email", value: firstAdminEmail },
+          { name: "email_verified", value: "true" }
+        ]
+      });
+
+      const adminAttachment = new CfnUserPoolUserToGroupAttachment(this, "FirstAdminGroupAttachment", {
+        userPoolId: userPool.userPoolId,
+        groupName: "admin",
+        username: firstAdmin.ref
+      });
+      adminAttachment.node.addDependency(adminGroup);
+    }
+
     const apiFunction = new NodejsFunction(this, "PickemApiFunction", {
       runtime: Runtime.NODEJS_22_X,
+      functionName: `${resourcePrefix}-api`,
       entry: "src/backend/api.ts",
       handler: "handler",
       timeout: Duration.seconds(10),
@@ -55,6 +83,7 @@ export class PickemStack extends Stack {
     table.grantReadWriteData(apiFunction);
 
     const scraperFunction = new DockerImageFunction(this, "DraftKingsScraperFunction", {
+      functionName: `${resourcePrefix}-draftkings-scraper`,
       code: DockerImageCode.fromImageAsset("scraper"),
       timeout: Duration.minutes(5),
       memorySize: 1024,
@@ -66,6 +95,7 @@ export class PickemStack extends Stack {
 
     const resultsFunction = new NodejsFunction(this, "ResultsSyncFunction", {
       runtime: Runtime.NODEJS_22_X,
+      functionName: `${resourcePrefix}-results-sync`,
       entry: "src/backend/resultsHandler.ts",
       handler: "handler",
       timeout: Duration.minutes(2),
@@ -80,6 +110,7 @@ export class PickemStack extends Stack {
     });
 
     const httpApi = new HttpApi(this, "PickemHttpApi", {
+      apiName: `${resourcePrefix}-http-api`,
       corsPreflight: {
         allowHeaders: ["authorization", "content-type"],
         allowMethods: [CorsHttpMethod.GET, CorsHttpMethod.POST, CorsHttpMethod.PUT, CorsHttpMethod.OPTIONS],
@@ -99,6 +130,7 @@ export class PickemStack extends Stack {
     });
 
     new Rule(this, "TuesdayOpeningLineScrapeRule", {
+      ruleName: `${resourcePrefix}-tuesday-opening-line-scrape`,
       description: "Runs the DraftKings opening-line scrape once on Tuesday mornings during football season.",
       schedule: Schedule.cron({
         minute: "0",
@@ -109,12 +141,83 @@ export class PickemStack extends Stack {
     });
 
     new Rule(this, "ResultsSyncRule", {
+      ruleName: `${resourcePrefix}-results-sync`,
       description: "Checks for final scores separately from odds scraping.",
       schedule: Schedule.cron({
         minute: "0",
         hour: "5"
       }),
       targets: [new LambdaFunction(resultsFunction)]
+    });
+
+    if (enableAmplify) {
+      const githubPatParameter = new CfnParameter(this, "GithubPat", {
+        type: "String",
+        noEcho: true,
+        description: "GitHub PAT used by the new Amplify app to connect to granttoenges/pickem_bot."
+      });
+
+      const githubSecret = new Secret(this, "GithubPatSecret", {
+        secretName: `${resourcePrefix}-github-pat`,
+        secretStringValue: SecretValue.unsafePlainText(githubPatParameter.valueAsString)
+      });
+
+      const amplifyApp = new CfnApp(this, "AmplifyApp", {
+        name: `${resourcePrefix}-amplify`,
+        repository: "https://github.com/granttoenges/pickem_bot",
+        accessToken: githubSecret.secretValue.toString(),
+        platform: "WEB_COMPUTE",
+        environmentVariables: [
+          { name: "NEXT_PUBLIC_AWS_REGION", value: this.region },
+          { name: "NEXT_PUBLIC_API_BASE_URL", value: httpApi.apiEndpoint },
+          { name: "NEXT_PUBLIC_COGNITO_USER_POOL_ID", value: userPool.userPoolId },
+          { name: "NEXT_PUBLIC_COGNITO_CLIENT_ID", value: userPoolClient.userPoolClientId },
+          { name: "NEXT_PUBLIC_SEASON_ID", value: new Date().getFullYear().toString() },
+          { name: "NEXT_PUBLIC_WEEK_ID", value: "1" }
+        ],
+        buildSpec: [
+          "version: 1",
+          "frontend:",
+          "  phases:",
+          "    preBuild:",
+          "      commands:",
+          "        - npm ci",
+          "    build:",
+          "      commands:",
+          "        - npm run build",
+          "  artifacts:",
+          "    baseDirectory: .next",
+          "    files:",
+          "      - '**/*'",
+          "  cache:",
+          "    paths:",
+          "      - node_modules/**/*"
+        ].join("\n")
+      });
+
+      new CfnBranch(this, "AmplifyMasterBranch", {
+        appId: amplifyApp.attrAppId,
+        branchName: "master",
+        enableAutoBuild: true,
+        stage: "PRODUCTION"
+      });
+
+      new CfnOutput(this, "AmplifyDefaultDomain", {
+        value: amplifyApp.attrDefaultDomain
+      });
+    }
+
+    new CfnOutput(this, "ApiBaseUrl", {
+      value: httpApi.apiEndpoint
+    });
+    new CfnOutput(this, "CognitoUserPoolId", {
+      value: userPool.userPoolId
+    });
+    new CfnOutput(this, "CognitoUserPoolClientId", {
+      value: userPoolClient.userPoolClientId
+    });
+    new CfnOutput(this, "DraftKingsScraperFunctionName", {
+      value: scraperFunction.functionName
     });
   }
 }

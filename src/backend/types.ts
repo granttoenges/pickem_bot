@@ -21,6 +21,10 @@ export interface Game {
   status: "scheduled" | "final";
   homeScore?: number;
   awayScore?: number;
+  isVisible?: boolean;
+  pickMarket?: Market;
+  adminNote?: string;
+  overrideSource?: "draftkings" | "admin_override";
 }
 
 export interface OpeningLine {
@@ -44,6 +48,19 @@ export interface PlayerPick {
   selectedTeam: string;
   submittedAt: string;
   result: PickResult;
+}
+
+export interface GameWithLines extends Game {
+  lines: OpeningLine[];
+  userPick?: PlayerPick;
+}
+
+export interface Standing {
+  userId: string;
+  displayName: string;
+  wins: number;
+  losses: number;
+  pushes: number;
 }
 
 export interface GradedPick extends PlayerPick {

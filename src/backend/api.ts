@@ -1,8 +1,8 @@
 import type { APIGatewayProxyEventV2WithJWTAuthorizer, APIGatewayProxyStructuredResultV2 } from "aws-lambda";
 import { z } from "zod";
 import { PickemRepository } from "./repository";
-import { assertBeforeCutoff } from "./time";
-import type { Game, PlayerPick, Week } from "./types";
+import { assertBeforeCutoff, defaultWeeklyCutoffUtc } from "./time";
+import type { Game, GameWithLines, PlayerPick, Week } from "./types";
 
 const gameSchema = z.object({
   gameId: z.string(),
@@ -14,7 +14,20 @@ const gameSchema = z.object({
   kickoffAt: z.string(),
   status: z.enum(["scheduled", "final"]).default("scheduled"),
   homeScore: z.number().optional(),
-  awayScore: z.number().optional()
+  awayScore: z.number().optional(),
+  isVisible: z.boolean().optional(),
+  pickMarket: z.enum(["spread", "moneyline"]).optional(),
+  adminNote: z.string().optional(),
+  overrideSource: z.enum(["draftkings", "admin_override"]).optional()
+});
+
+const adminGameSchema = z.object({
+  seasonId: z.string(),
+  weekId: z.string(),
+  gameId: z.string(),
+  isVisible: z.boolean(),
+  pickMarket: z.enum(["spread", "moneyline"]),
+  adminNote: z.string().optional()
 });
 
 const pickSchema = z.object({
@@ -40,9 +53,27 @@ export async function handler(event: APIGatewayProxyEventV2WithJWTAuthorizer): P
       const weekId = requireQuery(event, "weekId");
       const [week, games] = await Promise.all([
         repository.getWeek(seasonId, weekId),
-        repository.listGames(seasonId, weekId)
+        repository.listVisibleGames(seasonId, weekId)
       ]);
-      return json({ week, games });
+      return json({ week: week ?? defaultWeek(seasonId, weekId), games: await withLines(repository, games, getUserId(event)) });
+    }
+
+    if (method === "GET" && path === "/admin/week") {
+      requireGroup(event, "admin");
+      const seasonId = requireQuery(event, "seasonId");
+      const weekId = requireQuery(event, "weekId");
+      const [week, games, picks, scrapeRuns] = await Promise.all([
+        repository.getWeek(seasonId, weekId),
+        repository.listGames(seasonId, weekId),
+        repository.listPicks(seasonId, weekId),
+        repository.listScrapeRuns(seasonId, weekId)
+      ]);
+      return json({
+        week: week ?? defaultWeek(seasonId, weekId),
+        games: await withLines(repository, games),
+        picks,
+        scrapeRuns
+      });
     }
 
     if (method === "POST" && path === "/admin/games") {
@@ -50,6 +81,25 @@ export async function handler(event: APIGatewayProxyEventV2WithJWTAuthorizer): P
       const game = gameSchema.parse(parseBody(event)) as Game;
       await repository.putGame(game);
       return json({ game }, 201);
+    }
+
+    if (method === "PUT" && path === "/admin/games") {
+      requireGroup(event, "admin");
+      const body = adminGameSchema.parse(parseBody(event));
+      const games = await repository.listGames(body.seasonId, body.weekId);
+      const existing = games.find((game) => game.gameId === body.gameId);
+      if (!existing) {
+        return json({ message: "Game not found." }, 404);
+      }
+      const game: Game = {
+        ...existing,
+        isVisible: body.isVisible,
+        pickMarket: body.pickMarket,
+        adminNote: body.adminNote,
+        overrideSource: "admin_override"
+      };
+      await repository.updateGameAdminFields(game);
+      return json({ game });
     }
 
     if (method === "PUT" && path === "/picks") {
@@ -70,6 +120,12 @@ export async function handler(event: APIGatewayProxyEventV2WithJWTAuthorizer): P
       return json({ pick });
     }
 
+    if (method === "GET" && path === "/standings") {
+      const seasonId = requireQuery(event, "seasonId");
+      const standings = await repository.listStandings(seasonId);
+      return json({ standings });
+    }
+
     if (method === "POST" && path === "/admin/weeks") {
       requireGroup(event, "admin");
       const week = parseBody(event) as Week;
@@ -83,6 +139,24 @@ export async function handler(event: APIGatewayProxyEventV2WithJWTAuthorizer): P
     const statusCode = message.includes("locked") ? 409 : message.includes("Unauthorized") ? 403 : 400;
     return json({ message }, statusCode);
   }
+}
+
+async function withLines(repository: PickemRepository, games: Game[], userId?: string): Promise<GameWithLines[]> {
+  return Promise.all(games.map(async (game) => ({
+    ...game,
+    lines: await repository.listOpeningLines(game.gameId),
+    userPick: userId ? await repository.getUserPick(game.seasonId, game.weekId, userId, game.gameId) : undefined
+  })));
+}
+
+function defaultWeek(seasonId: string, weekId: string): Week {
+  return {
+    seasonId,
+    weekId,
+    label: `Week ${weekId}`,
+    cutoffAt: defaultWeeklyCutoffUtc(new Date()),
+    status: "draft"
+  };
 }
 
 function parseBody(event: APIGatewayProxyEventV2WithJWTAuthorizer): unknown {

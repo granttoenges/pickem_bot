@@ -160,7 +160,7 @@ def fetch_page(url: str) -> str:
         raise RuntimeError("Install scraper dependencies with: pip install 'scrapling[fetchers]'") from exc
 
     page = Fetcher.get(url, stealthy_headers=True, timeout=60)
-    return str(page.html)
+    return page.body.decode("utf-8", errors="replace")
 
 
 def parse_draftkings_page(
@@ -175,7 +175,11 @@ def parse_draftkings_page(
     if embedded:
         return parse_embedded_json(embedded, league, season_id, week_id, captured_at, source_url)
 
-    raise RuntimeError("Could not find parseable DraftKings event data. Use saved HTML to update selectors.")
+    initial_state = extract_initial_state(html)
+    if initial_state:
+        return parse_initial_state(initial_state, league, season_id, week_id, captured_at, source_url)
+
+    raise RuntimeError("Could not find DraftKings initial state. Use saved HTML to update selectors.")
 
 
 def extract_next_data(html: str) -> dict[str, Any] | None:
@@ -183,6 +187,171 @@ def extract_next_data(html: str) -> dict[str, Any] | None:
     if not match:
         return None
     return json.loads(match.group(1))
+
+
+def extract_initial_state(html: str) -> dict[str, Any] | None:
+    match = re.search(r"window\.__INITIAL_STATE__ = (.*?);\s*</script>", html, re.DOTALL)
+    if not match:
+        return None
+    return json.loads(match.group(1))
+
+
+def parse_initial_state(
+    payload: dict[str, Any],
+    league: str,
+    season_id: str,
+    week_id: str,
+    captured_at: str,
+    source_url: str,
+) -> tuple[list[Game], list[OpeningLine]]:
+    event_nodes: list[dict[str, Any]] = []
+    for container_key in ["stadiumLeagueData", "widgetZones", "wildcardLiveData"]:
+        container = payload.get(container_key)
+        if isinstance(container, dict):
+            events = container.get("events")
+            if isinstance(events, list):
+                event_nodes.extend([event for event in events if isinstance(event, dict)])
+            elif isinstance(events, dict):
+                event_nodes.extend([event for event in events.values() if isinstance(event, dict)])
+
+    if not event_nodes:
+        # DraftKings returns valid league pages with no weekly games outside posted football boards.
+        return [], []
+
+    markets_by_event: dict[str, list[dict[str, Any]]] = {}
+    selections_by_market: dict[str, list[dict[str, Any]]] = {}
+    for container_key in ["stadiumLeagueData", "widgetZones", "wildcardLiveData"]:
+        container = payload.get(container_key)
+        if not isinstance(container, dict):
+            continue
+        for market in values_as_dicts(container.get("markets")):
+            event_id = str(market.get("eventId") or market.get("event_id") or "")
+            if event_id:
+                markets_by_event.setdefault(event_id, []).append(market)
+        for selection in values_as_dicts(container.get("selections")):
+            market_id = str(selection.get("marketId") or selection.get("market_id") or "")
+            if market_id:
+                selections_by_market.setdefault(market_id, []).append(selection)
+
+    games: list[Game] = []
+    lines: list[OpeningLine] = []
+    for index, event in enumerate(event_nodes):
+        home = first_string(event, ["homeTeamName", "homeTeam", "home_team", "homeName", "home"])
+        away = first_string(event, ["awayTeamName", "awayTeam", "away_team", "awayName", "away"])
+        kickoff = first_string(event, ["startDate", "startTime", "commenceTime", "eventStartDate"])
+        event_id = str(event.get("eventId") or event.get("id") or index)
+
+        if not home or not away or not kickoff:
+            continue
+
+        game_id = stable_game_id(league, kickoff, away, home)
+        games.append(Game(
+            gameId=game_id,
+            seasonId=season_id,
+            weekId=week_id,
+            league=league,
+            awayTeam=away,
+            homeTeam=home,
+            kickoffAt=kickoff,
+        ))
+
+        spread_line = build_line_from_markets(
+            game_id,
+            "spread",
+            markets_by_event.get(event_id, []),
+            selections_by_market,
+            home,
+            away,
+            captured_at,
+            source_url,
+        )
+        if spread_line:
+            lines.append(spread_line)
+
+        moneyline = build_line_from_markets(
+            game_id,
+            "moneyline",
+            markets_by_event.get(event_id, []),
+            selections_by_market,
+            home,
+            away,
+            captured_at,
+            source_url,
+        )
+        if moneyline:
+            lines.append(moneyline)
+
+    return games, lines
+
+
+def values_as_dicts(value: Any) -> list[dict[str, Any]]:
+    if isinstance(value, list):
+        return [item for item in value if isinstance(item, dict)]
+    if isinstance(value, dict):
+        return [item for item in value.values() if isinstance(item, dict)]
+    return []
+
+
+def build_line_from_markets(
+    game_id: str,
+    market: str,
+    markets: list[dict[str, Any]],
+    selections_by_market: dict[str, list[dict[str, Any]]],
+    home: str,
+    away: str,
+    captured_at: str,
+    source_url: str,
+) -> OpeningLine | None:
+    candidates = [
+        item for item in markets
+        if market in str(item.get("marketType") or item.get("name") or item.get("label") or "").lower()
+    ]
+    for candidate in candidates:
+        market_id = str(candidate.get("id") or candidate.get("marketId") or "")
+        selections = selections_by_market.get(market_id, [])
+        if not selections:
+            continue
+        if market == "spread":
+            home_spread = selection_points(selections, home)
+            away_spread = selection_points(selections, away)
+            if home_spread is not None or away_spread is not None:
+                return OpeningLine(
+                    gameId=game_id,
+                    market="spread",
+                    source="draftkings",
+                    capturedAt=captured_at,
+                    homeSpread=home_spread,
+                    awaySpread=away_spread,
+                    originalPayload={"sourceUrl": source_url, "marketId": market_id},
+                )
+        if market == "moneyline":
+            home_ml = selection_price(selections, home)
+            away_ml = selection_price(selections, away)
+            if home_ml is not None or away_ml is not None:
+                return OpeningLine(
+                    gameId=game_id,
+                    market="moneyline",
+                    source="draftkings",
+                    capturedAt=captured_at,
+                    homeMoneyline=home_ml,
+                    awayMoneyline=away_ml,
+                    originalPayload={"sourceUrl": source_url, "marketId": market_id},
+                )
+    return None
+
+
+def selection_points(selections: list[dict[str, Any]], team: str) -> float | None:
+    for selection in selections:
+        if team.lower() in str(selection.get("label") or selection.get("name") or selection.get("outcomeLabel") or "").lower():
+            return first_number(selection, ["points", "line", "handicap"])
+    return None
+
+
+def selection_price(selections: list[dict[str, Any]], team: str) -> int | None:
+    for selection in selections:
+        if team.lower() in str(selection.get("label") or selection.get("name") or selection.get("outcomeLabel") or "").lower():
+            return first_int(selection, ["oddsAmerican", "americanOdds", "displayOdds", "odds"])
+    return None
 
 
 def parse_embedded_json(
