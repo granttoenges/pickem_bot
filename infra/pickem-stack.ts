@@ -15,7 +15,7 @@ import { Secret } from "aws-cdk-lib/aws-secretsmanager";
 export class PickemStack extends Stack {
   constructor(scope: Construct, id: string, props?: StackProps) {
     super(scope, id, props);
-    const resourcePrefix = "pickem-bot-v1";
+    const resourcePrefix = "pickem-bot-v1-run2";
     const firstAdminEmail = process.env.FIRST_ADMIN_EMAIL;
     const enableAmplify = process.env.ENABLE_AMPLIFY === "true";
 

@@ -3,7 +3,7 @@ import { PickemStack } from "./pickem-stack";
 
 const app = new App();
 
-new PickemStack(app, "PickemBotV1Stack", {
+new PickemStack(app, "PickemBotV1Run2Stack", {
   env: {
     account: process.env.CDK_DEFAULT_ACCOUNT,
     region: process.env.CDK_DEFAULT_REGION ?? "us-east-1"
