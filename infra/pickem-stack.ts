@@ -3,7 +3,7 @@ import { CfnApp, CfnBranch } from "aws-cdk-lib/aws-amplify";
 import { AttributeType, BillingMode, Table } from "aws-cdk-lib/aws-dynamodb";
 import { Rule, Schedule } from "aws-cdk-lib/aws-events";
 import { LambdaFunction } from "aws-cdk-lib/aws-events-targets";
-import { DockerImageCode, DockerImageFunction, Runtime } from "aws-cdk-lib/aws-lambda";
+import { Runtime } from "aws-cdk-lib/aws-lambda";
 import { NodejsFunction } from "aws-cdk-lib/aws-lambda-nodejs";
 import { CfnUserPoolUser, CfnUserPoolUserToGroupAttachment, UserPool, UserPoolClient, UserPoolClientIdentityProvider, UserPoolGroup } from "aws-cdk-lib/aws-cognito";
 import { HttpApi, CorsHttpMethod } from "aws-cdk-lib/aws-apigatewayv2";
@@ -82,9 +82,11 @@ export class PickemStack extends Stack {
     });
     table.grantReadWriteData(apiFunction);
 
-    const scraperFunction = new DockerImageFunction(this, "DraftKingsScraperFunction", {
+    const scraperFunction = new NodejsFunction(this, "DraftKingsScraperFunction", {
+      runtime: Runtime.NODEJS_22_X,
       functionName: `${resourcePrefix}-draftkings-scraper`,
-      code: DockerImageCode.fromImageAsset("scraper"),
+      entry: "src/backend/draftkingsScraper.ts",
+      handler: "handler",
       timeout: Duration.minutes(5),
       memorySize: 1024,
       environment: {
