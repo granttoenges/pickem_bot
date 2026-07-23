@@ -1,0 +1,12 @@
+node_modules
+.next
+cdk.out
+dist
+coverage
+.env
+.env.local
+.DS_Store
+__pycache__
+*.pyc
+scraper/output
+tsconfig.tsbuildinfo

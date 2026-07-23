@@ -1,0 +1,19 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: #f7f3ea;
+  color: #171717;
+}
+
+button,
+input,
+select {
+  font: inherit;
+}

@@ -1,0 +1,6 @@
+{
+  "app": "npx ts-node --prefer-ts-exts --compiler-options '{\"module\":\"CommonJS\"}' infra/app.ts",
+  "context": {
+    "@aws-cdk/core:newStyleStackSynthesis": true
+  }
+}
