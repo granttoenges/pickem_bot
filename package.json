@@ -15,7 +15,7 @@
     "cdk:synth": "cdk synth",
     "cdk:deploy": "cdk deploy PickemBotV1Run2Stack --require-approval never",
     "scraper:local": "python3 scraper/draftkings_scraper.py",
-    "seed:dummy": "ts-node scripts/seed-dummy-data.ts"
+    "seed:dummy": "node scripts/seed-dummy-data.cjs"
   },
   "dependencies": {
     "@aws-sdk/client-cognito-identity-provider": "^3.1094.0",
