@@ -6,7 +6,7 @@ import { LambdaFunction } from "aws-cdk-lib/aws-events-targets";
 import { Runtime } from "aws-cdk-lib/aws-lambda";
 import { NodejsFunction } from "aws-cdk-lib/aws-lambda-nodejs";
 import { CfnUserPoolUser, CfnUserPoolUserToGroupAttachment, UserPool, UserPoolClient, UserPoolClientIdentityProvider, UserPoolGroup } from "aws-cdk-lib/aws-cognito";
-import { HttpApi, CorsHttpMethod } from "aws-cdk-lib/aws-apigatewayv2";
+import { HttpApi, CorsHttpMethod, HttpMethod } from "aws-cdk-lib/aws-apigatewayv2";
 import { HttpLambdaIntegration } from "aws-cdk-lib/aws-apigatewayv2-integrations";
 import { HttpUserPoolAuthorizer } from "aws-cdk-lib/aws-apigatewayv2-authorizers";
 import { Construct } from "constructs";
@@ -144,6 +144,11 @@ export class PickemStack extends Stack {
     });
 
     const apiIntegration = new HttpLambdaIntegration("PickemApiIntegration", apiFunction);
+    httpApi.addRoutes({
+      path: "/{proxy+}",
+      methods: [HttpMethod.OPTIONS],
+      integration: apiIntegration
+    });
     httpApi.addRoutes({
       path: "/{proxy+}",
       integration: apiIntegration,

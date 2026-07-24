@@ -80,6 +80,13 @@ export async function handler(event: APIGatewayProxyEventV2WithJWTAuthorizer): P
       return json({ ok: true });
     }
 
+    if (method === "OPTIONS") {
+      return {
+        statusCode: 204,
+        headers: corsHeaders()
+      };
+    }
+
     const auth = getAuth(event);
 
     if (method === "GET" && path === "/leagues") {
@@ -405,11 +412,17 @@ function json(body: unknown, statusCode = 200): APIGatewayProxyStructuredResultV
     statusCode,
     headers: {
       "content-type": "application/json",
-      "access-control-allow-origin": process.env.CORS_ORIGIN ?? "*",
-      "access-control-allow-methods": "GET,POST,PUT,DELETE,OPTIONS",
-      "access-control-allow-headers": "authorization,content-type"
+      ...corsHeaders()
     },
     body: JSON.stringify(body)
+  };
+}
+
+function corsHeaders(): Record<string, string> {
+  return {
+    "access-control-allow-origin": process.env.CORS_ORIGIN ?? "*",
+    "access-control-allow-methods": "GET,POST,PUT,DELETE,OPTIONS",
+    "access-control-allow-headers": "authorization,content-type"
   };
 }
 
