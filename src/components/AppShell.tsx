@@ -15,7 +15,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <nav className="flex flex-wrap items-center gap-2 text-sm">
             <Link className="rounded px-3 py-2 hover:bg-white/10" href="/">Board</Link>
             <Link className="rounded px-3 py-2 hover:bg-white/10" href="/standings">Standings</Link>
-            {session?.groups.includes("admin") ? <Link className="rounded px-3 py-2 hover:bg-white/10" href="/admin">Admin</Link> : null}
+            {session?.groups.some((group) => group === "admin" || group === "super_admin") ? <Link className="rounded px-3 py-2 hover:bg-white/10" href="/admin">Admin</Link> : null}
             {session ? (
               <button
                 className="rounded bg-gold px-3 py-2 font-semibold text-ink"

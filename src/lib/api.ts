@@ -3,54 +3,99 @@
 import { appConfig } from "./config";
 import { getStoredSession } from "./auth";
 
-export type Market = "spread" | "moneyline";
-export type League = "NFL" | "NCAAF";
+export type SportLeague = "NFL" | "NCAAF";
+export type Market = "spread" | "team_total";
+export type PickSide = "home" | "away" | "over" | "under";
+
+export interface AppLeague {
+  leagueId: string;
+  name: string;
+  status: string;
+}
 
 export interface OpeningLine {
   gameId: string;
   market: Market;
-  source: "draftkings" | "admin_override";
+  source: "draftkings" | "admin_override" | "seed";
   capturedAt: string;
   homeSpread?: number;
   awaySpread?: number;
-  homeMoneyline?: number;
-  awayMoneyline?: number;
+  homeTeamTotal?: number;
+  awayTeamTotal?: number;
 }
 
-export interface GameWithLines {
+export interface PickOption {
+  leagueId: string;
+  seasonId: string;
+  weekId: string;
+  optionId: string;
+  gameId: string;
+  sportLeague: SportLeague;
+  team: string;
+  market: Market;
+  side: PickSide;
+  lineValue: number;
+  label: string;
+}
+
+export interface PickClaim {
+  leagueId: string;
+  seasonId: string;
+  weekId: string;
+  optionId: string;
+  userId: string;
+  claimedAt: string;
+}
+
+export interface GameWithOptions {
+  leagueId: string;
   gameId: string;
   seasonId: string;
   weekId: string;
-  league: League;
+  sportLeague: SportLeague;
   awayTeam: string;
   homeTeam: string;
   kickoffAt: string;
   status: "scheduled" | "final";
-  isVisible?: boolean;
-  pickMarket?: Market;
   adminNote?: string;
   overrideSource?: string;
   lines: OpeningLine[];
-  userPick?: PlayerPick;
+  options: PickOption[];
 }
 
 export interface Week {
+  leagueId: string;
   seasonId: string;
   weekId: string;
   label: string;
   cutoffAt: string;
   status: string;
+  nflPickCountRequired: number;
+  ncaafPickCountRequired: number;
 }
 
 export interface PlayerPick {
+  leagueId: string;
   seasonId: string;
   weekId: string;
+  optionId: string;
   gameId: string;
   userId: string;
+  sportLeague: SportLeague;
+  team: string;
   market: Market;
-  selectedTeam: string;
+  side: PickSide;
+  lineValue: number;
   submittedAt: string;
   result: string;
+}
+
+export interface LeagueMember {
+  leagueId: string;
+  userId: string;
+  email?: string;
+  role: "league_admin" | "player";
+  createdAt: string;
 }
 
 export interface ScrapeRun {
@@ -61,6 +106,7 @@ export interface ScrapeRun {
 }
 
 export interface Standing {
+  leagueId: string;
   userId: string;
   displayName: string;
   wins: number;
@@ -68,11 +114,17 @@ export interface Standing {
   pushes: number;
 }
 
+export interface PickSummary {
+  NFL: { submitted: number; required: number; complete: boolean };
+  NCAAF: { submitted: number; required: number; complete: boolean };
+  complete: boolean;
+}
+
 export async function apiGet<T>(path: string): Promise<T> {
   return apiRequest<T>(path, { method: "GET" });
 }
 
-export async function apiSend<T>(path: string, method: "POST" | "PUT", body: unknown): Promise<T> {
+export async function apiSend<T>(path: string, method: "POST" | "PUT" | "DELETE", body: unknown): Promise<T> {
   return apiRequest<T>(path, {
     method,
     body: JSON.stringify(body)
@@ -99,6 +151,6 @@ async function apiRequest<T>(path: string, init: RequestInit): Promise<T> {
   return payload as T;
 }
 
-export function weekQuery(): string {
-  return `seasonId=${encodeURIComponent(appConfig.seasonId)}&weekId=${encodeURIComponent(appConfig.weekId)}`;
+export function weekQuery(leagueId: string): string {
+  return `leagueId=${encodeURIComponent(leagueId)}&seasonId=${encodeURIComponent(appConfig.seasonId)}&weekId=${encodeURIComponent(appConfig.weekId)}`;
 }

@@ -1,6 +1,25 @@
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
-import { DynamoDBDocumentClient, GetCommand, PutCommand, QueryCommand, ScanCommand } from "@aws-sdk/lib-dynamodb";
-import type { Game, OpeningLine, PlayerPick, ScrapeRun, Standing, Week } from "./types";
+import {
+  DeleteCommand,
+  DynamoDBDocumentClient,
+  GetCommand,
+  PutCommand,
+  QueryCommand,
+  ScanCommand,
+  TransactWriteCommand
+} from "@aws-sdk/lib-dynamodb";
+import type {
+  AppLeague,
+  Game,
+  LeagueMember,
+  OpeningLine,
+  PickClaim,
+  PickOption,
+  PlayerPick,
+  ScrapeRun,
+  Standing,
+  Week
+} from "./types";
 
 const client = DynamoDBDocumentClient.from(new DynamoDBClient({}));
 
@@ -11,10 +30,75 @@ export class PickemRepository {
     }
   }
 
-  async getWeek(seasonId: string, weekId: string): Promise<Week | undefined> {
+  async listAppLeagues(): Promise<AppLeague[]> {
+    const result = await client.send(new ScanCommand({
+      TableName: this.tableName,
+      FilterExpression: "entityType = :entityType",
+      ExpressionAttributeValues: { ":entityType": "AppLeague" }
+    }));
+    return (result.Items ?? []) as AppLeague[];
+  }
+
+  async putAppLeague(league: AppLeague): Promise<void> {
+    await client.send(new PutCommand({
+      TableName: this.tableName,
+      Item: {
+        pk: "APP_LEAGUE",
+        sk: `LEAGUE#${league.leagueId}`,
+        entityType: "AppLeague",
+        ...league
+      }
+    }));
+  }
+
+  async listMembersForUser(userId: string): Promise<LeagueMember[]> {
+    const result = await client.send(new ScanCommand({
+      TableName: this.tableName,
+      FilterExpression: "entityType = :entityType and userId = :userId",
+      ExpressionAttributeValues: {
+        ":entityType": "LeagueMember",
+        ":userId": userId
+      }
+    }));
+    return (result.Items ?? []) as LeagueMember[];
+  }
+
+  async listLeagueMembers(leagueId: string): Promise<LeagueMember[]> {
+    const result = await client.send(new QueryCommand({
+      TableName: this.tableName,
+      KeyConditionExpression: "pk = :pk and begins_with(sk, :prefix)",
+      ExpressionAttributeValues: {
+        ":pk": `LEAGUE#${leagueId}`,
+        ":prefix": "MEMBER#"
+      }
+    }));
+    return (result.Items ?? []) as LeagueMember[];
+  }
+
+  async getLeagueMember(leagueId: string, userId: string): Promise<LeagueMember | undefined> {
     const result = await client.send(new GetCommand({
       TableName: this.tableName,
-      Key: { pk: `WEEK#${seasonId}#${weekId}`, sk: "META" }
+      Key: { pk: `LEAGUE#${leagueId}`, sk: `MEMBER#${userId}` }
+    }));
+    return result.Item as LeagueMember | undefined;
+  }
+
+  async putLeagueMember(member: LeagueMember): Promise<void> {
+    await client.send(new PutCommand({
+      TableName: this.tableName,
+      Item: {
+        pk: `LEAGUE#${member.leagueId}`,
+        sk: `MEMBER#${member.userId}`,
+        entityType: "LeagueMember",
+        ...member
+      }
+    }));
+  }
+
+  async getWeek(leagueId: string, seasonId: string, weekId: string): Promise<Week | undefined> {
+    const result = await client.send(new GetCommand({
+      TableName: this.tableName,
+      Key: { pk: weekPk(leagueId, seasonId, weekId), sk: "META" }
     }));
     return result.Item as Week | undefined;
   }
@@ -23,7 +107,7 @@ export class PickemRepository {
     await client.send(new PutCommand({
       TableName: this.tableName,
       Item: {
-        pk: `WEEK#${week.seasonId}#${week.weekId}`,
+        pk: weekPk(week.leagueId, week.seasonId, week.weekId),
         sk: "META",
         entityType: "Week",
         ...week
@@ -31,37 +115,29 @@ export class PickemRepository {
     }));
   }
 
-  async listGames(seasonId: string, weekId: string): Promise<Game[]> {
+  async listGames(leagueId: string, seasonId: string, weekId: string): Promise<Game[]> {
     const result = await client.send(new QueryCommand({
       TableName: this.tableName,
       KeyConditionExpression: "pk = :pk and begins_with(sk, :prefix)",
       ExpressionAttributeValues: {
-        ":pk": `WEEK#${seasonId}#${weekId}`,
+        ":pk": weekPk(leagueId, seasonId, weekId),
         ":prefix": "GAME#"
       }
     }));
-    return (result.Items ?? []) as Game[];
-  }
-
-  async listVisibleGames(seasonId: string, weekId: string): Promise<Game[]> {
-    const games = await this.listGames(seasonId, weekId);
-    return games.filter((game) => game.isVisible);
+    return ((result.Items ?? []) as Game[]).map(normalizeGame);
   }
 
   async putGame(game: Game): Promise<void> {
+    const normalized = normalizeGame(game);
     await client.send(new PutCommand({
       TableName: this.tableName,
       Item: {
-        pk: `WEEK#${game.seasonId}#${game.weekId}`,
-        sk: `GAME#${game.gameId}`,
+        pk: weekPk(normalized.leagueId, normalized.seasonId, normalized.weekId),
+        sk: `GAME#${normalized.gameId}`,
         entityType: "Game",
-        ...game
+        ...normalized
       }
     }));
-  }
-
-  async updateGameAdminFields(game: Game): Promise<void> {
-    await this.putGame(game);
   }
 
   async listOpeningLines(gameId: string): Promise<OpeningLine[]> {
@@ -97,46 +173,152 @@ export class PickemRepository {
     }
   }
 
-  async putPick(pick: PlayerPick): Promise<void> {
+  async putPickOption(option: PickOption): Promise<void> {
     await client.send(new PutCommand({
       TableName: this.tableName,
       Item: {
-        pk: `PICK#${pick.seasonId}#${pick.weekId}`,
-        sk: `USER#${pick.userId}#GAME#${pick.gameId}`,
-        entityType: "PlayerPick",
-        ...pick
+        pk: optionsPk(option.leagueId, option.seasonId, option.weekId),
+        sk: `OPTION#${option.optionId}`,
+        entityType: "PickOption",
+        ...option
       }
     }));
   }
 
-  async listPicks(seasonId: string, weekId: string): Promise<PlayerPick[]> {
+  async listPickOptions(leagueId: string, seasonId: string, weekId: string): Promise<PickOption[]> {
+    const result = await client.send(new QueryCommand({
+      TableName: this.tableName,
+      KeyConditionExpression: "pk = :pk and begins_with(sk, :prefix)",
+      ExpressionAttributeValues: {
+        ":pk": optionsPk(leagueId, seasonId, weekId),
+        ":prefix": "OPTION#"
+      }
+    }));
+    return (result.Items ?? []) as PickOption[];
+  }
+
+  async listClaims(leagueId: string, seasonId: string, weekId: string): Promise<PickClaim[]> {
     const result = await client.send(new QueryCommand({
       TableName: this.tableName,
       KeyConditionExpression: "pk = :pk",
       ExpressionAttributeValues: {
-        ":pk": `PICK#${seasonId}#${weekId}`
+        ":pk": claimsPk(leagueId, seasonId, weekId)
+      }
+    }));
+    return (result.Items ?? []) as PickClaim[];
+  }
+
+  async listPicks(leagueId: string, seasonId: string, weekId: string): Promise<PlayerPick[]> {
+    const result = await client.send(new QueryCommand({
+      TableName: this.tableName,
+      KeyConditionExpression: "pk = :pk",
+      ExpressionAttributeValues: {
+        ":pk": picksPk(leagueId, seasonId, weekId)
       }
     }));
     return (result.Items ?? []) as PlayerPick[];
   }
 
-  async getUserPick(seasonId: string, weekId: string, userId: string, gameId: string): Promise<PlayerPick | undefined> {
-    const result = await client.send(new GetCommand({
+  async listUserPicks(leagueId: string, seasonId: string, weekId: string, userId: string): Promise<PlayerPick[]> {
+    const result = await client.send(new QueryCommand({
       TableName: this.tableName,
-      Key: {
-        pk: `PICK#${seasonId}#${weekId}`,
-        sk: `USER#${userId}#GAME#${gameId}`
+      KeyConditionExpression: "pk = :pk and begins_with(sk, :prefix)",
+      ExpressionAttributeValues: {
+        ":pk": picksPk(leagueId, seasonId, weekId),
+        ":prefix": `USER#${userId}#`
       }
     }));
-    return result.Item as PlayerPick | undefined;
+    return (result.Items ?? []) as PlayerPick[];
   }
 
-  async listStandings(seasonId: string): Promise<Standing[]> {
+  async claimPick(pick: PlayerPick, previousOptionId?: string): Promise<void> {
+    const claimedAt = pick.claimedAt;
+    const transactItems = [];
+
+    if (previousOptionId && previousOptionId !== pick.optionId) {
+      transactItems.push({
+        Delete: {
+          TableName: this.tableName,
+          Key: { pk: claimsPk(pick.leagueId, pick.seasonId, pick.weekId), sk: `OPTION#${previousOptionId}` },
+          ConditionExpression: "userId = :userId",
+          ExpressionAttributeValues: { ":userId": pick.userId }
+        }
+      });
+      transactItems.push({
+        Delete: {
+          TableName: this.tableName,
+          Key: { pk: picksPk(pick.leagueId, pick.seasonId, pick.weekId), sk: `USER#${pick.userId}#OPTION#${previousOptionId}` }
+        }
+      });
+    }
+
+    transactItems.push({
+      Put: {
+        TableName: this.tableName,
+        Item: {
+          pk: claimsPk(pick.leagueId, pick.seasonId, pick.weekId),
+          sk: `OPTION#${pick.optionId}`,
+          entityType: "PickClaim",
+          leagueId: pick.leagueId,
+          seasonId: pick.seasonId,
+          weekId: pick.weekId,
+          optionId: pick.optionId,
+          userId: pick.userId,
+          claimedAt
+        },
+        ConditionExpression: "attribute_not_exists(pk) or userId = :userId",
+        ExpressionAttributeValues: { ":userId": pick.userId }
+      }
+    });
+    transactItems.push({
+      Put: {
+        TableName: this.tableName,
+        Item: {
+          pk: picksPk(pick.leagueId, pick.seasonId, pick.weekId),
+          sk: `USER#${pick.userId}#OPTION#${pick.optionId}`,
+          entityType: "PlayerPick",
+          ...pick
+        }
+      }
+    });
+
+    try {
+      await client.send(new TransactWriteCommand({ TransactItems: transactItems }));
+    } catch (error) {
+      if (error instanceof Error && error.name === "TransactionCanceledException") {
+        throw new Error("That option has already been claimed.");
+      }
+      throw error;
+    }
+  }
+
+  async releasePick(leagueId: string, seasonId: string, weekId: string, userId: string, optionId: string): Promise<void> {
+    await client.send(new TransactWriteCommand({
+      TransactItems: [
+        {
+          Delete: {
+            TableName: this.tableName,
+            Key: { pk: claimsPk(leagueId, seasonId, weekId), sk: `OPTION#${optionId}` },
+            ConditionExpression: "userId = :userId",
+            ExpressionAttributeValues: { ":userId": userId }
+          }
+        },
+        {
+          Delete: {
+            TableName: this.tableName,
+            Key: { pk: picksPk(leagueId, seasonId, weekId), sk: `USER#${userId}#OPTION#${optionId}` }
+          }
+        }
+      ]
+    }));
+  }
+
+  async listStandings(leagueId: string, seasonId: string): Promise<Standing[]> {
     const result = await client.send(new QueryCommand({
       TableName: this.tableName,
       KeyConditionExpression: "pk = :pk",
       ExpressionAttributeValues: {
-        ":pk": `STANDINGS#${seasonId}`
+        ":pk": `STANDINGS#${leagueId}#${seasonId}`
       }
     }));
     return (result.Items ?? []) as Standing[];
@@ -175,4 +357,28 @@ export class PickemRepository {
       }
     }));
   }
+}
+
+function normalizeGame(game: Game): Game {
+  const sportLeague = game.sportLeague ?? game.league;
+  if (!sportLeague) {
+    throw new Error("Game is missing sportLeague.");
+  }
+  return { ...game, sportLeague };
+}
+
+function weekPk(leagueId: string, seasonId: string, weekId: string): string {
+  return `LEAGUE#${leagueId}#WEEK#${seasonId}#${weekId}`;
+}
+
+function optionsPk(leagueId: string, seasonId: string, weekId: string): string {
+  return `OPTIONS#${leagueId}#${seasonId}#${weekId}`;
+}
+
+function claimsPk(leagueId: string, seasonId: string, weekId: string): string {
+  return `CLAIM#${leagueId}#${seasonId}#${weekId}`;
+}
+
+function picksPk(leagueId: string, seasonId: string, weekId: string): string {
+  return `PICK#${leagueId}#${seasonId}#${weekId}`;
 }

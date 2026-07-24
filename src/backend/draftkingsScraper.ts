@@ -10,6 +10,7 @@ const defaultUrls = {
 interface ScraperDetail {
   seasonId?: string;
   weekId?: string;
+  leagueId?: string;
 }
 
 export async function handler(event: EventBridgeEvent<"Scheduled Event", ScraperDetail>): Promise<{
@@ -19,6 +20,7 @@ export async function handler(event: EventBridgeEvent<"Scheduled Event", Scraper
 }> {
   const seasonId = event.detail?.seasonId ?? process.env.DEFAULT_SEASON_ID ?? new Date().getUTCFullYear().toString();
   const weekId = event.detail?.weekId ?? process.env.DEFAULT_WEEK_ID ?? "current";
+  const leagueId = event.detail?.leagueId ?? process.env.DEFAULT_APP_LEAGUE_ID ?? "friends";
   const capturedAt = new Date().toISOString();
   const repository = new PickemRepository();
   const games: Game[] = [];
@@ -28,7 +30,7 @@ export async function handler(event: EventBridgeEvent<"Scheduled Event", Scraper
   for (const [league, sourceUrl] of Object.entries(defaultUrls)) {
     try {
       const html = await fetchPage(sourceUrl);
-      const parsed = parseDraftKingsPage(html, league as "NFL" | "NCAAF", seasonId, weekId, capturedAt, sourceUrl);
+      const parsed = parseDraftKingsPage(html, leagueId, league as "NFL" | "NCAAF", seasonId, weekId, capturedAt, sourceUrl);
       games.push(...parsed.games);
       lines.push(...parsed.lines);
     } catch (error) {
@@ -78,6 +80,7 @@ async function fetchPage(url: string): Promise<string> {
 
 function parseDraftKingsPage(
   html: string,
+  leagueId: string,
   league: "NFL" | "NCAAF",
   seasonId: string,
   weekId: string,
@@ -103,16 +106,15 @@ function parseDraftKingsPage(
 
     const gameId = stableGameId(league, kickoffAt, awayTeam, homeTeam);
     games.push({
+      leagueId,
       gameId,
       seasonId,
       weekId,
-      league,
+      sportLeague: league,
       awayTeam,
       homeTeam,
       kickoffAt,
       status: "scheduled",
-      isVisible: false,
-      pickMarket: "spread",
       overrideSource: "draftkings"
     });
 
@@ -129,19 +131,6 @@ function parseDraftKingsPage(
       });
     }
 
-    const homeMoneyline = firstNumber(event, ["homeMoneyline", "homeMl", "moneylineHome"]);
-    const awayMoneyline = firstNumber(event, ["awayMoneyline", "awayMl", "moneylineAway"]);
-    if (homeMoneyline !== undefined || awayMoneyline !== undefined) {
-      lines.push({
-        gameId,
-        market: "moneyline",
-        source: "draftkings",
-        capturedAt,
-        homeMoneyline,
-        awayMoneyline,
-        originalPayload: { sourceUrl, eventIndex: index }
-      });
-    }
   }
 
   return { games, lines };

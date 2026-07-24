@@ -11,6 +11,7 @@ import { HttpLambdaIntegration } from "aws-cdk-lib/aws-apigatewayv2-integrations
 import { HttpUserPoolAuthorizer } from "aws-cdk-lib/aws-apigatewayv2-authorizers";
 import { Construct } from "constructs";
 import { Secret } from "aws-cdk-lib/aws-secretsmanager";
+import { Effect, PolicyStatement } from "aws-cdk-lib/aws-iam";
 
 export class PickemStack extends Stack {
   constructor(scope: Construct, id: string, props?: StackProps) {
@@ -46,6 +47,11 @@ export class PickemStack extends Stack {
       groupName: "admin"
     });
 
+    const superAdminGroup = new UserPoolGroup(this, "SuperAdminGroup", {
+      userPool,
+      groupName: "super_admin"
+    });
+
     new UserPoolGroup(this, "PlayerGroup", {
       userPool,
       groupName: "player"
@@ -68,6 +74,13 @@ export class PickemStack extends Stack {
         username: firstAdmin.ref
       });
       adminAttachment.node.addDependency(adminGroup);
+
+      const superAdminAttachment = new CfnUserPoolUserToGroupAttachment(this, "FirstSuperAdminGroupAttachment", {
+        userPoolId: userPool.userPoolId,
+        groupName: "super_admin",
+        username: firstAdmin.ref
+      });
+      superAdminAttachment.node.addDependency(superAdminGroup);
     }
 
     const apiFunction = new NodejsFunction(this, "PickemApiFunction", {
@@ -77,10 +90,20 @@ export class PickemStack extends Stack {
       handler: "handler",
       timeout: Duration.seconds(10),
       environment: {
-        TABLE_NAME: table.tableName
+        TABLE_NAME: table.tableName,
+        USER_POOL_ID: userPool.userPoolId
       }
     });
     table.grantReadWriteData(apiFunction);
+    apiFunction.addToRolePolicy(new PolicyStatement({
+      effect: Effect.ALLOW,
+      actions: [
+        "cognito-idp:AdminCreateUser",
+        "cognito-idp:AdminAddUserToGroup",
+        "cognito-idp:AdminGetUser"
+      ],
+      resources: [userPool.userPoolArn]
+    }));
 
     const scraperFunction = new NodejsFunction(this, "DraftKingsScraperFunction", {
       runtime: Runtime.NODEJS_22_X,
@@ -115,7 +138,7 @@ export class PickemStack extends Stack {
       apiName: `${resourcePrefix}-http-api`,
       corsPreflight: {
         allowHeaders: ["authorization", "content-type"],
-        allowMethods: [CorsHttpMethod.GET, CorsHttpMethod.POST, CorsHttpMethod.PUT, CorsHttpMethod.OPTIONS],
+        allowMethods: [CorsHttpMethod.GET, CorsHttpMethod.POST, CorsHttpMethod.PUT, CorsHttpMethod.DELETE, CorsHttpMethod.OPTIONS],
         allowOrigins: ["*"]
       }
     });

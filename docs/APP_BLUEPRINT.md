@@ -2,7 +2,7 @@
 
 ## Summary
 
-Pickem Bot is a private, invite-only NFL and college football pickem application. Friends log in each week, review the selected games, and submit picks against either the spread or moneyline. The league uses Tuesday morning DraftKings opening-line values captured once per week. Picks for the week lock every Friday at 10:00 AM America/Chicago.
+Pickem Bot is a private, invite-only NFL and college football pickem application. Users can belong to one or more app leagues, review the available weekly games, and claim exact spread or team-total over/under options. Once an exact option is claimed in a league, it is unavailable to other members of that league. The app uses Tuesday morning DraftKings opening-line values captured once per week. Picks for the week lock every Friday at 10:00 AM America/Chicago.
 
 The app is designed to run locally during development and deploy cheaply on AWS using serverless services with near-zero idle cost.
 
@@ -12,21 +12,22 @@ No The Odds API integration or paid odds provider is part of v1.
 
 ### Roles
 
-- Admin: invite users, manage seasons/weeks, review scraped games, select active games, correct opening lines, review submitted picks, correct results, and trigger grading.
-- Player: log in, view weekly games and opening lines, submit or edit picks before cutoff, and view weekly and season standings.
+- Super admin: create app leagues, assign league admins, invite users, and manage all league settings.
+- League admin: invite users, manage weekly pick quotas, review scraped games, correct lines, review submitted picks, correct results, and trigger grading for their league.
+- Player: log in, view weekly games and opening lines, claim or edit available pick options before cutoff, and view league standings.
 
 ### Weekly Flow
 
-1. Tuesday morning: scheduled DraftKings scraper captures NFL and NCAAF spreads and moneylines.
-2. Admin reviews imported games, selects active games, and fixes missing or malformed lines.
-3. Players submit or edit picks until Friday 10:00 AM America/Chicago.
+1. Tuesday morning: scheduled DraftKings scraper captures NFL and NCAAF opening spreads.
+2. Admin reviews imported games and fixes missing or malformed lines; team totals can be seeded or entered manually until DraftKings team-total parsing is added.
+3. Players claim exact spread or team-total options until Friday 10:00 AM America/Chicago.
 4. After games finish, results sync imports final scores and grades picks against the stored opening lines.
 5. Standings update for the week and season.
 
 ## Technical Architecture
 
 - Frontend: Next.js, React, TypeScript, Tailwind CSS.
-- Auth: Amazon Cognito user pool with invite-only users and `admin` / `player` groups.
+- Auth: Amazon Cognito user pool with invite-only users and `super_admin`, `admin`, and `player` groups.
 - API: API Gateway HTTP API with Lambda handlers.
 - Storage: DynamoDB single-table design using on-demand billing.
 - Odds automation: Scrapling-based DraftKings scraper.
@@ -38,13 +39,16 @@ No The Odds API integration or paid odds provider is part of v1.
 
 Use a single DynamoDB table with composite keys:
 
-- `SEASON#{seasonId}` / `META`: season metadata.
-- `WEEK#{seasonId}#{weekId}` / `META`: week metadata, including cutoff timestamp.
-- `WEEK#{seasonId}#{weekId}` / `GAME#{gameId}`: selected or imported game.
+- `APP_LEAGUE` / `LEAGUE#{leagueId}`: app league metadata.
+- `LEAGUE#{leagueId}` / `MEMBER#{userId}`: league membership and league-scoped role.
+- `LEAGUE#{leagueId}#WEEK#{seasonId}#{weekId}` / `META`: week metadata, cutoff timestamp, and NFL/NCAAF quotas.
+- `LEAGUE#{leagueId}#WEEK#{seasonId}#{weekId}` / `GAME#{gameId}`: imported or manually added game.
 - `GAME#{gameId}` / `OPENING_LINE#{market}`: immutable Tuesday opening line.
 - `USER#{userId}` / `PROFILE`: user profile and display name.
-- `PICK#{seasonId}#{weekId}` / `USER#{userId}#GAME#{gameId}`: player pick.
-- `STANDINGS#{seasonId}` / `USER#{userId}`: season aggregate.
+- `OPTIONS#{leagueId}#{seasonId}#{weekId}` / `OPTION#{optionId}`: claimable spread or team-total pick option.
+- `CLAIM#{leagueId}#{seasonId}#{weekId}` / `OPTION#{optionId}`: exact-option claim used for uniqueness.
+- `PICK#{leagueId}#{seasonId}#{weekId}` / `USER#{userId}#OPTION#{optionId}`: player pick.
+- `STANDINGS#{leagueId}#{seasonId}` / `USER#{userId}`: league season aggregate.
 - `SCRAPE#{seasonId}#{weekId}` / `RUN#{timestamp}`: scrape metadata and errors.
 
 Opening lines must be immutable after creation. Admin corrections create an audit field such as `source: "admin_override"` and preserve the original scraped payload when available.
@@ -58,7 +62,6 @@ The scraper targets public DraftKings pages for NFL and NCAAF odds and extracts:
 - Away team
 - Home team
 - Spread line and price
-- Moneyline price
 - Source URL
 - Scrape timestamp
 
@@ -125,7 +128,9 @@ python scraper/draftkings_scraper.py
 
 - Tuesday scraper creates opening lines once for a week.
 - Re-running scraper for the same week does not overwrite opening lines.
-- DraftKings NFL and NCAAF spreads/moneylines normalize into consistent game records.
+- DraftKings NFL and NCAAF spreads normalize into consistent game records.
+- Exact pick options cannot be claimed by two users in the same league.
+- A user can release or replace an option before cutoff.
 - Players can submit and edit weekly picks before Friday 10:00 AM America/Chicago.
 - Players cannot create, edit, or delete weekly picks after Friday 10:00 AM America/Chicago.
 - Results grading uses stored opening lines, not later odds.

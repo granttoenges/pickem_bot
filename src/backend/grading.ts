@@ -5,16 +5,25 @@ export function gradePick(game: Game, line: OpeningLine, pick: PlayerPick): Grad
     throw new Error("Game is not final.");
   }
 
-  if (pick.market === "moneyline") {
-    const winner = game.homeScore > game.awayScore ? game.homeTeam : game.awayScore > game.homeScore ? game.awayTeam : undefined;
-    return { ...pick, result: winner === undefined ? "push" : winner === pick.selectedTeam ? "win" : "loss" };
+  const selectedIsHome = pick.team === game.homeTeam;
+  const selectedScore = selectedIsHome ? game.homeScore : game.awayScore;
+
+  if (pick.market === "team_total") {
+    const total = selectedIsHome ? line.homeTeamTotal : line.awayTeamTotal;
+    if (total === undefined) {
+      throw new Error("Missing team total for selected team.");
+    }
+    if (selectedScore > total) {
+      return { ...pick, result: pick.side === "over" ? "win" : "loss" };
+    }
+    if (selectedScore < total) {
+      return { ...pick, result: pick.side === "under" ? "win" : "loss" };
+    }
+    return { ...pick, result: "push" };
   }
 
-  const selectedIsHome = pick.selectedTeam === game.homeTeam;
-  const selectedScore = selectedIsHome ? game.homeScore : game.awayScore;
   const opponentScore = selectedIsHome ? game.awayScore : game.homeScore;
   const spread = selectedIsHome ? line.homeSpread : line.awaySpread;
-
   if (spread === undefined) {
     throw new Error("Missing spread for selected team.");
   }

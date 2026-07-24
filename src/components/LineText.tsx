@@ -1,6 +1,6 @@
-import type { GameWithLines, Market } from "../lib/api";
+import type { GameWithOptions, Market } from "../lib/api";
 
-export function LineText({ game, market }: { game: GameWithLines; market: Market }) {
+export function LineText({ game, market }: { game: GameWithOptions; market: Market }) {
   const line = game.lines.find((item) => item.market === market);
   if (!line) {
     return <span className="text-ink/50">No {market} line</span>;
@@ -14,19 +14,12 @@ export function LineText({ game, market }: { game: GameWithLines; market: Market
   }
   return (
     <span>
-      {game.awayTeam} {formatMoneyline(line.awayMoneyline)} / {game.homeTeam} {formatMoneyline(line.homeMoneyline)}
+      {game.awayTeam} total {formatSpread(line.awayTeamTotal)} / {game.homeTeam} total {formatSpread(line.homeTeamTotal)}
     </span>
   );
 }
 
 function formatSpread(value?: number): string {
-  if (value === undefined) {
-    return "--";
-  }
-  return value > 0 ? `+${value}` : `${value}`;
-}
-
-function formatMoneyline(value?: number): string {
   if (value === undefined) {
     return "--";
   }

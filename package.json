@@ -14,9 +14,11 @@
     "cdk:bootstrap:v1": "cdk bootstrap aws://390844781259/us-east-1 --toolkit-stack-name PickemBotV1CdkToolkit --qualifier pckmv1",
     "cdk:synth": "cdk synth",
     "cdk:deploy": "cdk deploy PickemBotV1Run2Stack --require-approval never",
-    "scraper:local": "python3 scraper/draftkings_scraper.py"
+    "scraper:local": "python3 scraper/draftkings_scraper.py",
+    "seed:dummy": "ts-node scripts/seed-dummy-data.ts"
   },
   "dependencies": {
+    "@aws-sdk/client-cognito-identity-provider": "^3.1094.0",
     "@aws-sdk/client-dynamodb": "^3.620.0",
     "@aws-sdk/lib-dynamodb": "^3.620.0",
     "amazon-cognito-identity-js": "^6.3.12",

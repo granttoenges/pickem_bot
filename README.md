@@ -1,6 +1,6 @@
 # Pickem Bot
 
-Private football pickem app for NFL and college football spreads and moneylines.
+Private football pickem app for NFL and college football claim-based spread and team-total picks.
 
 The v1 architecture is a low-cost serverless AWS app:
 
