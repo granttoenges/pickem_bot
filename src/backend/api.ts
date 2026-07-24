@@ -75,11 +75,12 @@ export async function handler(event: APIGatewayProxyEventV2WithJWTAuthorizer): P
     const repository = new PickemRepository();
     const method = event.requestContext.http.method;
     const path = event.rawPath;
-    const auth = getAuth(event);
 
     if (method === "GET" && path === "/health") {
       return json({ ok: true });
     }
+
+    const auth = getAuth(event);
 
     if (method === "GET" && path === "/leagues") {
       const leagues = await leaguesForUser(repository, auth);
