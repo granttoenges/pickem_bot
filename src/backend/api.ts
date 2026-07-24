@@ -14,6 +14,7 @@ import type { AppLeague, Game, GameWithOptions, LeagueMember, PickOption, Player
 const cognito = new CognitoIdentityProviderClient({});
 
 const defaultLeagueId = "friends";
+const superAdminEmails = new Set(["grantoenges@gmail.com"]);
 
 const createLeagueSchema = z.object({
   name: z.string().min(1).max(80)
@@ -395,16 +396,28 @@ interface AuthState {
 
 function getAuth(event: APIGatewayProxyEventV2WithJWTAuthorizer): AuthState {
   const claims = event.requestContext.authorizer.jwt.claims;
-  const groups = Array.isArray(claims["cognito:groups"])
-    ? claims["cognito:groups"] as string[]
-    : String(claims["cognito:groups"] ?? "").split(",").filter(Boolean);
+  const groups = parseGroups(claims["cognito:groups"]);
+  const email = claims.email ? String(claims.email).toLowerCase() : undefined;
+  const isEmailSuperAdmin = email ? superAdminEmails.has(email) : false;
   return {
     userId: String(claims.sub),
-    email: claims.email ? String(claims.email) : undefined,
+    email,
     groups,
-    isSuperAdmin: groups.includes("super_admin"),
+    isSuperAdmin: isEmailSuperAdmin || groups.includes("super_admin"),
     isLegacyAdmin: groups.includes("admin")
   };
+}
+
+function parseGroups(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return value.map((group) => String(group).trim()).filter(Boolean);
+  }
+  return String(value ?? "")
+    .replace(/^\[/, "")
+    .replace(/\]$/, "")
+    .split(",")
+    .map((group) => group.trim().replace(/^"|"$/g, ""))
+    .filter(Boolean);
 }
 
 function json(body: unknown, statusCode = 200): APIGatewayProxyStructuredResultV2 {

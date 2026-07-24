@@ -2,11 +2,17 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { getStoredSession, logout } from "../lib/auth";
+import { useEffect, useState } from "react";
+import { getStoredSession, logout, SessionState } from "../lib/auth";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const router = useRouter();
-  const session = typeof window !== "undefined" ? getStoredSession() : undefined;
+  const [session, setSession] = useState<SessionState>();
+
+  useEffect(() => {
+    setSession(getStoredSession());
+  }, []);
+
   return (
     <main className="min-h-screen bg-field text-ink">
       <header className="border-b border-ink/10 bg-ink text-chalk">
