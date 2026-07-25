@@ -316,7 +316,7 @@ export default function AdminPage() {
           {games.map((game) => (
             <div key={game.gameId}>
               <GameOddsBoard game={game} claims={claims} mode="summary" />
-              <div className="rounded-b border-x border-b border-ink/10 bg-white px-4 py-2 text-sm text-ink/60">
+              <div className="mx-auto max-w-[430px] rounded-b border-x border-b border-ink/10 bg-white px-4 py-2 text-sm text-ink/60">
                 {game.options.length} claimable options · {claims.filter((claim) => game.options.some((option) => option.optionId === claim.optionId)).length} claimed
               </div>
             </div>

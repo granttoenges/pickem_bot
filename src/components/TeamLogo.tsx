@@ -25,14 +25,17 @@ const teamLogos: Record<string, string> = {
   Oregon: "https://a.espncdn.com/i/teamlogos/ncaa/500/2483.png"
 };
 
-export function TeamLogo({ teamName, size = "md" }: { teamName: string; size?: "sm" | "md" }) {
+export function TeamLogo({ teamName, size = "md", tone = "light" }: { teamName: string; size?: "sm" | "md"; tone?: "light" | "dark" }) {
   const src = teamLogos[teamName];
   const dimensions = size === "sm" ? "h-8 w-8" : "h-11 w-11";
   const textSize = size === "sm" ? "text-[10px]" : "text-xs";
+  const fallbackTone = tone === "dark"
+    ? "border-white/15 bg-white/10 text-white/70"
+    : "border-ink/10 bg-ink/5 text-ink/60";
 
   if (!src) {
     return (
-      <span className={`${dimensions} ${textSize} flex shrink-0 items-center justify-center rounded border border-ink/10 bg-ink/5 font-bold text-ink/60`}>
+      <span className={`${dimensions} ${textSize} ${fallbackTone} flex shrink-0 items-center justify-center rounded border font-bold`}>
         {initials(teamName)}
       </span>
     );
