@@ -109,7 +109,12 @@ export async function handler(event: APIGatewayProxyEventV2WithJWTAuthorizer): P
         createdAt: now,
         status: "active"
       };
-      await repository.putAppLeague(league);
+      await repository.putAppLeague(league).catch((error) => {
+        if (error instanceof Error && error.name === "ConditionalCheckFailedException") {
+          throw new SafeApiError("A league with that name already exists.", 409);
+        }
+        throw error;
+      });
       await repository.putLeagueMember({
         leagueId: league.leagueId,
         userId: auth.userId,
@@ -269,15 +274,24 @@ export async function handler(event: APIGatewayProxyEventV2WithJWTAuthorizer): P
 
     return json({ message: "Not found." }, 404);
   } catch (error) {
+    if (error instanceof SafeApiError) {
+      return json({ message: error.message }, error.statusCode);
+    }
+    if (error instanceof z.ZodError) {
+      return json({ message: "Invalid request." }, 400);
+    }
     const message = error instanceof Error ? error.message : "Unexpected error.";
-    const statusCode = message.includes("locked")
-      ? 409
-      : message.includes("Unauthorized")
-        ? 403
-        : message.includes("already been claimed")
-          ? 409
-          : 400;
-    return json({ message }, statusCode);
+    if (message.includes("locked")) {
+      return json({ message }, 409);
+    }
+    if (message.includes("Unauthorized")) {
+      return json({ message: "Unauthorized." }, 403);
+    }
+    if (message.includes("already been claimed")) {
+      return json({ message }, 409);
+    }
+    console.error("Unhandled API error", error);
+    return json({ message: "Unexpected server error." }, 500);
   }
 }
 
@@ -411,7 +425,7 @@ function defaultWeek(leagueId: string, seasonId: string, weekId: string): Week {
 
 async function leaguesForUser(repository: PickemRepository, auth: AuthState): Promise<AppLeague[]> {
   const allLeagues = await repository.listAppLeagues();
-  if (auth.isSuperAdmin || auth.isLegacyAdmin) {
+  if (auth.isSuperAdmin) {
     return allLeagues;
   }
   const memberships = await repository.listMembersForUser(auth.userId);
@@ -420,7 +434,7 @@ async function leaguesForUser(repository: PickemRepository, auth: AuthState): Pr
 }
 
 async function requireLeagueAccess(repository: PickemRepository, auth: AuthState, leagueId: string): Promise<void> {
-  if (auth.isSuperAdmin || auth.isLegacyAdmin) {
+  if (auth.isSuperAdmin) {
     return;
   }
   const member = await repository.getLeagueMember(leagueId, auth.userId);
@@ -430,7 +444,7 @@ async function requireLeagueAccess(repository: PickemRepository, auth: AuthState
 }
 
 async function requireLeagueAdmin(repository: PickemRepository, auth: AuthState, leagueId: string): Promise<void> {
-  if (auth.isSuperAdmin || auth.isLegacyAdmin) {
+  if (auth.isSuperAdmin) {
     return;
   }
   const member = await repository.getLeagueMember(leagueId, auth.userId);
@@ -440,7 +454,7 @@ async function requireLeagueAdmin(repository: PickemRepository, auth: AuthState,
 }
 
 function requireSuperAdmin(auth: AuthState): void {
-  if (!auth.isSuperAdmin && !auth.isLegacyAdmin) {
+  if (!auth.isSuperAdmin) {
     throw new Error("Unauthorized.");
   }
 }
@@ -486,6 +500,9 @@ async function invitePlayer(repository: PickemRepository, leagueId: string, emai
 }
 
 function parseBody(event: APIGatewayProxyEventV2WithJWTAuthorizer): unknown {
+  if (event.body && event.body.length > 65_536) {
+    throw new SafeApiError("Request body is too large.", 413);
+  }
   return event.body ? JSON.parse(event.body) : {};
 }
 
@@ -502,7 +519,6 @@ interface AuthState {
   email?: string;
   groups: string[];
   isSuperAdmin: boolean;
-  isLegacyAdmin: boolean;
 }
 
 function getAuth(event: APIGatewayProxyEventV2WithJWTAuthorizer): AuthState {
@@ -514,8 +530,7 @@ function getAuth(event: APIGatewayProxyEventV2WithJWTAuthorizer): AuthState {
     userId: String(claims.sub),
     email,
     groups,
-    isSuperAdmin: isEmailSuperAdmin || groups.includes("super_admin"),
-    isLegacyAdmin: groups.includes("admin")
+    isSuperAdmin: isEmailSuperAdmin || groups.includes("super_admin")
   };
 }
 
@@ -543,8 +558,12 @@ function json(body: unknown, statusCode = 200): APIGatewayProxyStructuredResultV
 }
 
 function corsHeaders(): Record<string, string> {
+  const allowedOrigins = (process.env.CORS_ALLOWED_ORIGINS ?? "https://master.d3v9lgp3ju9tca.amplifyapp.com")
+    .split(",")
+    .map((origin) => origin.trim())
+    .filter(Boolean);
   return {
-    "access-control-allow-origin": process.env.CORS_ORIGIN ?? "*",
+    "access-control-allow-origin": allowedOrigins[0] ?? "https://master.d3v9lgp3ju9tca.amplifyapp.com",
     "access-control-allow-methods": "GET,POST,PUT,DELETE,OPTIONS",
     "access-control-allow-headers": "authorization,content-type"
   };
@@ -552,4 +571,10 @@ function corsHeaders(): Record<string, string> {
 
 function slugify(value: string): string {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "league";
+}
+
+class SafeApiError extends Error {
+  constructor(message: string, readonly statusCode: number) {
+    super(message);
+  }
 }

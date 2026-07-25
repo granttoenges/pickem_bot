@@ -6,12 +6,13 @@ import { LambdaFunction } from "aws-cdk-lib/aws-events-targets";
 import { Runtime } from "aws-cdk-lib/aws-lambda";
 import { NodejsFunction } from "aws-cdk-lib/aws-lambda-nodejs";
 import { CfnUserPoolUser, CfnUserPoolUserToGroupAttachment, UserPool, UserPoolClient, UserPoolClientIdentityProvider, UserPoolGroup } from "aws-cdk-lib/aws-cognito";
-import { HttpApi, CorsHttpMethod, HttpMethod } from "aws-cdk-lib/aws-apigatewayv2";
+import { CfnStage, HttpApi, CorsHttpMethod, HttpMethod } from "aws-cdk-lib/aws-apigatewayv2";
 import { HttpLambdaIntegration } from "aws-cdk-lib/aws-apigatewayv2-integrations";
 import { HttpUserPoolAuthorizer } from "aws-cdk-lib/aws-apigatewayv2-authorizers";
 import { Construct } from "constructs";
 import { Secret } from "aws-cdk-lib/aws-secretsmanager";
 import { Effect, PolicyStatement } from "aws-cdk-lib/aws-iam";
+import { LogGroup, RetentionDays } from "aws-cdk-lib/aws-logs";
 
 export class PickemStack extends Stack {
   constructor(scope: Construct, id: string, props?: StackProps) {
@@ -19,12 +20,18 @@ export class PickemStack extends Stack {
     const resourcePrefix = "pickem-bot-v1-run2";
     const firstAdminEmail = process.env.FIRST_ADMIN_EMAIL;
     const enableAmplify = process.env.ENABLE_AMPLIFY === "true";
+    const corsAllowedOrigins = (process.env.CORS_ALLOWED_ORIGINS ?? "https://master.d3v9lgp3ju9tca.amplifyapp.com")
+      .split(",")
+      .map((origin) => origin.trim())
+      .filter(Boolean);
 
     const table = new Table(this, "PickemTable", {
       tableName: `${resourcePrefix}-table`,
       partitionKey: { name: "pk", type: AttributeType.STRING },
       sortKey: { name: "sk", type: AttributeType.STRING },
       billingMode: BillingMode.PAY_PER_REQUEST,
+      pointInTimeRecoverySpecification: { pointInTimeRecoveryEnabled: true },
+      deletionProtection: true,
       removalPolicy: RemovalPolicy.RETAIN
     });
 
@@ -32,13 +39,26 @@ export class PickemStack extends Stack {
       userPoolName: `${resourcePrefix}-users`,
       selfSignUpEnabled: false,
       signInAliases: { email: true },
+      passwordPolicy: {
+        minLength: 12,
+        requireLowercase: true,
+        requireUppercase: true,
+        requireDigits: true,
+        requireSymbols: true,
+        tempPasswordValidity: Duration.days(3)
+      },
       removalPolicy: RemovalPolicy.RETAIN
     });
 
     const userPoolClient = new UserPoolClient(this, "PickemUserPoolClient", {
       userPoolClientName: `${resourcePrefix}-web-client`,
       userPool,
-      authFlows: { userPassword: true, userSrp: true },
+      authFlows: { userSrp: true },
+      accessTokenValidity: Duration.minutes(30),
+      idTokenValidity: Duration.minutes(30),
+      refreshTokenValidity: Duration.days(7),
+      enableTokenRevocation: true,
+      preventUserExistenceErrors: true,
       supportedIdentityProviders: [UserPoolClientIdentityProvider.COGNITO]
     });
 
@@ -89,12 +109,21 @@ export class PickemStack extends Stack {
       entry: "src/backend/api.ts",
       handler: "handler",
       timeout: Duration.seconds(10),
+      logGroup: lambdaLogGroup(this, "PickemApiLogGroup", `${resourcePrefix}-api`),
       environment: {
         TABLE_NAME: table.tableName,
-        USER_POOL_ID: userPool.userPoolId
+        USER_POOL_ID: userPool.userPoolId,
+        CORS_ALLOWED_ORIGINS: corsAllowedOrigins.join(",")
       }
     });
-    table.grantReadWriteData(apiFunction);
+    grantTableAccess(apiFunction, table, [
+      "dynamodb:GetItem",
+      "dynamodb:PutItem",
+      "dynamodb:DeleteItem",
+      "dynamodb:Query",
+      "dynamodb:Scan",
+      "dynamodb:TransactWriteItems"
+    ]);
     apiFunction.addToRolePolicy(new PolicyStatement({
       effect: Effect.ALLOW,
       actions: [
@@ -112,11 +141,15 @@ export class PickemStack extends Stack {
       handler: "handler",
       timeout: Duration.minutes(5),
       memorySize: 1024,
+      logGroup: lambdaLogGroup(this, "DraftKingsScraperLogGroup", `${resourcePrefix}-draftkings-scraper`),
       environment: {
         TABLE_NAME: table.tableName
       }
     });
-    table.grantReadWriteData(scraperFunction);
+    grantTableAccess(scraperFunction, table, [
+      "dynamodb:PutItem",
+      "dynamodb:Query"
+    ]);
 
     const scrapeSchedulerFunction = new NodejsFunction(this, "DraftKingsScrapeSchedulerFunction", {
       runtime: Runtime.NODEJS_22_X,
@@ -124,12 +157,16 @@ export class PickemStack extends Stack {
       entry: "src/backend/scrapeScheduler.ts",
       handler: "handler",
       timeout: Duration.minutes(6),
+      logGroup: lambdaLogGroup(this, "DraftKingsScrapeSchedulerLogGroup", `${resourcePrefix}-draftkings-scrape-scheduler`),
       environment: {
         TABLE_NAME: table.tableName,
         SCRAPER_FUNCTION_NAME: scraperFunction.functionName
       }
     });
-    table.grantReadWriteData(scrapeSchedulerFunction);
+    grantTableAccess(scrapeSchedulerFunction, table, [
+      "dynamodb:PutItem",
+      "dynamodb:Scan"
+    ]);
     scraperFunction.grantInvoke(scrapeSchedulerFunction);
 
     const resultsFunction = new NodejsFunction(this, "ResultsSyncFunction", {
@@ -138,11 +175,14 @@ export class PickemStack extends Stack {
       entry: "src/backend/resultsHandler.ts",
       handler: "handler",
       timeout: Duration.minutes(2),
+      logGroup: lambdaLogGroup(this, "ResultsSyncLogGroup", `${resourcePrefix}-results-sync`),
       environment: {
         TABLE_NAME: table.tableName
       }
     });
-    table.grantReadWriteData(resultsFunction);
+    grantTableAccess(resultsFunction, table, [
+      "dynamodb:Scan"
+    ]);
 
     const authorizer = new HttpUserPoolAuthorizer("PickemAuthorizer", userPool, {
       userPoolClients: [userPoolClient]
@@ -153,7 +193,8 @@ export class PickemStack extends Stack {
       corsPreflight: {
         allowHeaders: ["authorization", "content-type"],
         allowMethods: [CorsHttpMethod.GET, CorsHttpMethod.POST, CorsHttpMethod.PUT, CorsHttpMethod.DELETE, CorsHttpMethod.OPTIONS],
-        allowOrigins: ["*"]
+        allowOrigins: corsAllowedOrigins,
+        maxAge: Duration.hours(1)
       }
     });
 
@@ -172,6 +213,13 @@ export class PickemStack extends Stack {
       path: "/health",
       integration: apiIntegration
     });
+    const defaultStage = httpApi.defaultStage?.node.defaultChild as CfnStage | undefined;
+    if (defaultStage) {
+      defaultStage.defaultRouteSettings = {
+        throttlingBurstLimit: 50,
+        throttlingRateLimit: 25
+      };
+    }
 
     new Rule(this, "DraftKingsScrapeSchedulerRule", {
       ruleName: `${resourcePrefix}-draftkings-scrape-scheduler`,
@@ -260,4 +308,20 @@ export class PickemStack extends Stack {
       value: scraperFunction.functionName
     });
   }
+}
+
+function grantTableAccess(fn: NodejsFunction, table: Table, actions: string[]): void {
+  fn.addToRolePolicy(new PolicyStatement({
+    effect: Effect.ALLOW,
+    actions,
+    resources: [table.tableArn]
+  }));
+}
+
+function lambdaLogGroup(scope: Construct, id: string, functionName: string): LogGroup {
+  return new LogGroup(scope, id, {
+    logGroupName: `/pickem-bot-v1-run2/lambda/${functionName}-secure`,
+    retention: RetentionDays.ONE_MONTH,
+    removalPolicy: RemovalPolicy.RETAIN
+  });
 }

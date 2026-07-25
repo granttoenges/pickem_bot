@@ -47,7 +47,8 @@ export class PickemRepository {
         sk: `LEAGUE#${league.leagueId}`,
         entityType: "AppLeague",
         ...league
-      }
+      },
+      ConditionExpression: "attribute_not_exists(pk)"
     }));
   }
 

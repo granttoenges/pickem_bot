@@ -10,7 +10,6 @@ import { appConfig } from "./config";
 
 const tokenKey = "pickem.idToken";
 const emailKey = "pickem.email";
-const groupsKey = "pickem.groups";
 
 export interface SessionState {
   idToken: string;
@@ -29,23 +28,27 @@ export function getStoredSession(): SessionState | undefined {
   if (typeof window === "undefined") {
     return undefined;
   }
-  const idToken = window.localStorage.getItem(tokenKey);
-  const email = window.localStorage.getItem(emailKey);
-  const groups = window.localStorage.getItem(groupsKey);
-  if (!idToken || !email) {
+  const sessionToken = window.sessionStorage.getItem(tokenKey);
+  window.localStorage.removeItem(tokenKey);
+  window.localStorage.removeItem(emailKey);
+  const token = sessionToken;
+  const email = window.sessionStorage.getItem(emailKey);
+  if (!token || !email) {
     return undefined;
   }
   return {
-    idToken,
+    idToken: token,
     email,
-    groups: groups ? JSON.parse(groups) as string[] : []
+    groups: groupsFromToken(token)
   };
 }
 
 export function logout(): void {
+  window.sessionStorage.removeItem(tokenKey);
+  window.sessionStorage.removeItem(emailKey);
   window.localStorage.removeItem(tokenKey);
   window.localStorage.removeItem(emailKey);
-  window.localStorage.removeItem(groupsKey);
+  window.localStorage.removeItem("pickem.groups");
 }
 
 export async function login(email: string, password: string): Promise<SessionState | NewPasswordRequiredState> {
@@ -88,10 +91,21 @@ function persistSession(session: CognitoUserSession, fallbackEmail: string): Ses
     email: payload.email ?? fallbackEmail,
     groups: payload["cognito:groups"] ?? []
   };
-  window.localStorage.setItem(tokenKey, state.idToken);
-  window.localStorage.setItem(emailKey, state.email);
-  window.localStorage.setItem(groupsKey, JSON.stringify(state.groups));
+  window.sessionStorage.setItem(tokenKey, state.idToken);
+  window.sessionStorage.setItem(emailKey, state.email);
+  window.localStorage.removeItem(tokenKey);
+  window.localStorage.removeItem(emailKey);
+  window.localStorage.removeItem("pickem.groups");
   return state;
+}
+
+function groupsFromToken(token: string): string[] {
+  try {
+    const payload = JSON.parse(window.atob(token.split(".")[1] ?? "")) as { "cognito:groups"?: string[] };
+    return payload["cognito:groups"] ?? [];
+  } catch {
+    return [];
+  }
 }
 
 function getUserPool(): CognitoUserPool {
