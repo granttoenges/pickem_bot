@@ -69,6 +69,9 @@ export interface Week {
   weekId: string;
   label: string;
   cutoffAt: string;
+  scrapeAt?: string;
+  scrapeStatus?: "pending" | "running" | "completed" | "failed";
+  scrapeCompletedAt?: string;
   status: string;
   nflPickCountRequired: number;
   ncaafPickCountRequired: number;

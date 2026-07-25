@@ -61,6 +61,8 @@ async function main(): Promise<void> {
     seasonId,
     weekId,
     label: `Week ${weekId}`,
+    scrapeAt: `${seasonId}-09-08T15:00:00.000Z`,
+    scrapeStatus: "pending",
     cutoffAt: `${seasonId}-09-11T15:00:00.000Z`,
     status: "open",
     nflPickCountRequired: 3,

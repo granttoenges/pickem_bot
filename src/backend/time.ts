@@ -10,6 +10,16 @@ export function defaultWeeklyCutoffUtc(weekStart: Date): string {
   return centralWallTimeToUtc(friday.getUTCFullYear(), friday.getUTCMonth() + 1, friday.getUTCDate(), 10, 0).toISOString();
 }
 
+export function defaultWeeklyScrapeUtc(weekStart: Date): string {
+  const centralParts = getCentralParts(weekStart);
+  const tuesday = new Date(Date.UTC(centralParts.year, centralParts.month - 1, centralParts.day));
+  const day = tuesday.getUTCDay();
+  const daysUntilTuesday = (2 - day + 7) % 7;
+  tuesday.setUTCDate(tuesday.getUTCDate() + daysUntilTuesday);
+
+  return centralWallTimeToUtc(tuesday.getUTCFullYear(), tuesday.getUTCMonth() + 1, tuesday.getUTCDate(), 10, 0).toISOString();
+}
+
 export function isBeforeCutoff(now: Date, cutoffAt: string): boolean {
   return now.getTime() < new Date(cutoffAt).getTime();
 }

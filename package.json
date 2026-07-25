@@ -20,6 +20,7 @@
   "dependencies": {
     "@aws-sdk/client-cognito-identity-provider": "^3.1094.0",
     "@aws-sdk/client-dynamodb": "^3.620.0",
+    "@aws-sdk/client-lambda": "^3.1095.0",
     "@aws-sdk/lib-dynamodb": "^3.620.0",
     "amazon-cognito-identity-js": "^6.3.12",
     "aws-cdk-lib": "^2.151.0",

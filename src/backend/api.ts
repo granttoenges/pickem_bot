@@ -7,8 +7,9 @@ import {
 import type { APIGatewayProxyEventV2WithJWTAuthorizer, APIGatewayProxyStructuredResultV2 } from "aws-lambda";
 import { z } from "zod";
 import { PickemRepository } from "./repository";
-import { assertBeforeCutoff, defaultWeeklyCutoffUtc } from "./time";
+import { assertBeforeCutoff, defaultWeeklyCutoffUtc, defaultWeeklyScrapeUtc } from "./time";
 import { pickSummary, validateQuota } from "./pickRules";
+import { applyWeekSettings } from "./weekSettingsRules";
 import type { AppLeague, Game, GameWithOptions, LeagueMember, PickOption, PlayerPick, Week } from "./types";
 
 const cognito = new CognitoIdentityProviderClient({});
@@ -36,7 +37,9 @@ const weekSettingsSchema = z.object({
   seasonId: z.string().min(1),
   weekId: z.string().min(1),
   nflPickCountRequired: z.number().int().min(0).max(20),
-  ncaafPickCountRequired: z.number().int().min(0).max(20)
+  ncaafPickCountRequired: z.number().int().min(0).max(20),
+  scrapeAt: z.string().datetime().optional(),
+  cutoffAt: z.string().datetime()
 });
 
 const gameSchema = z.object({
@@ -189,11 +192,12 @@ export async function handler(event: APIGatewayProxyEventV2WithJWTAuthorizer): P
       const body = weekSettingsSchema.parse(parseBody(event));
       await requireLeagueAdmin(repository, auth, body.leagueId);
       const current = await repository.getWeek(body.leagueId, body.seasonId, body.weekId);
-      const week: Week = {
-        ...(current ?? defaultWeek(body.leagueId, body.seasonId, body.weekId)),
+      const week = applyWeekSettings(current ?? defaultWeek(body.leagueId, body.seasonId, body.weekId), {
         nflPickCountRequired: body.nflPickCountRequired,
-        ncaafPickCountRequired: body.ncaafPickCountRequired
-      };
+        ncaafPickCountRequired: body.ncaafPickCountRequired,
+        cutoffAt: body.cutoffAt,
+        scrapeAt: body.scrapeAt
+      });
       await repository.putWeek(week);
       return json({ week });
     }
@@ -292,6 +296,8 @@ function defaultWeek(leagueId: string, seasonId: string, weekId: string): Week {
     weekId,
     label: `Week ${weekId}`,
     cutoffAt: defaultWeeklyCutoffUtc(new Date()),
+    scrapeAt: defaultWeeklyScrapeUtc(new Date()),
+    scrapeStatus: "pending",
     status: "open",
     nflPickCountRequired: 3,
     ncaafPickCountRequired: 3

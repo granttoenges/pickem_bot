@@ -30,7 +30,11 @@ export default function AdminPage() {
   const [newLeagueName, setNewLeagueName] = useState("");
   const [nflQuota, setNflQuota] = useState(3);
   const [ncaafQuota, setNcaafQuota] = useState(3);
+  const [scrapeAtLocal, setScrapeAtLocal] = useState("");
+  const [cutoffAtLocal, setCutoffAtLocal] = useState("");
   const [savingSettings, setSavingSettings] = useState(false);
+  const [showCreateLeague, setShowCreateLeague] = useState(false);
+  const [creatingLeague, setCreatingLeague] = useState(false);
   const [status, setStatus] = useState("Loading admin board...");
 
   useEffect(() => {
@@ -69,6 +73,8 @@ export default function AdminPage() {
       setMembers(payload.members);
       setNflQuota(payload.week.nflPickCountRequired);
       setNcaafQuota(payload.week.ncaafPickCountRequired);
+      setScrapeAtLocal(toDatetimeLocal(payload.week.scrapeAt));
+      setCutoffAtLocal(toDatetimeLocal(payload.week.cutoffAt));
       setStatus("");
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Could not load admin board.");
@@ -88,11 +94,15 @@ export default function AdminPage() {
         seasonId: week.seasonId,
         weekId: week.weekId,
         nflPickCountRequired: Number(form.get("nflPickCountRequired") ?? nflQuota),
-        ncaafPickCountRequired: Number(form.get("ncaafPickCountRequired") ?? ncaafQuota)
+        ncaafPickCountRequired: Number(form.get("ncaafPickCountRequired") ?? ncaafQuota),
+        scrapeAt: scrapeAtLocal ? fromDatetimeLocal(scrapeAtLocal) : undefined,
+        cutoffAt: fromDatetimeLocal(cutoffAtLocal)
       });
       setWeek(payload.week);
       setNflQuota(payload.week.nflPickCountRequired);
       setNcaafQuota(payload.week.ncaafPickCountRequired);
+      setScrapeAtLocal(toDatetimeLocal(payload.week.scrapeAt));
+      setCutoffAtLocal(toDatetimeLocal(payload.week.cutoffAt));
       setStatus("Weekly quotas saved.");
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Could not save quotas.");
@@ -121,15 +131,19 @@ export default function AdminPage() {
     if (!newLeagueName) {
       return;
     }
+    setCreatingLeague(true);
     try {
       const payload = await apiSend<{ league: AppLeague }>("/admin/leagues", "POST", { name: newLeagueName });
       setLeagues((current) => [...current, payload.league]);
       setActiveLeagueId(payload.league.leagueId);
       persistPreferredLeagueId(payload.league.leagueId);
       setNewLeagueName("");
+      setShowCreateLeague(false);
       setStatus("League created.");
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Could not create league.");
+    } finally {
+      setCreatingLeague(false);
     }
   }
 
@@ -154,10 +168,11 @@ export default function AdminPage() {
           <div>
             <p className="text-sm font-semibold uppercase tracking-[0.2em] text-turf">Admin Portal</p>
             <h1 className="text-4xl font-semibold">League Control</h1>
-            <p className="mt-2 text-ink/65">{week ? `${week.label} cutoff ${new Date(week.cutoffAt).toLocaleString()}` : "Manage league settings, invites, and weekly claims."}</p>
+            <p className="mt-2 text-ink/65">{week ? `${week.label} · DraftKings ${formatDateTime(week.scrapeAt)} · Picks close ${formatDateTime(week.cutoffAt)}` : "Manage league settings, invites, and weekly claims."}</p>
           </div>
           <div className="rounded border border-ink/10 bg-white p-4">
             <h2 className="mb-2 font-semibold">Scraper Status</h2>
+            {week ? <div className="mb-2 text-sm text-ink/70">Configured status: <strong>{week.scrapeStatus ?? "pending"}</strong></div> : null}
             {scrapeRuns[0] ? (
               <div className="text-sm text-ink/70">
                 <div>Status: <strong>{scrapeRuns[0].status}</strong></div>
@@ -184,13 +199,12 @@ export default function AdminPage() {
               {leagues.map((league) => <option key={league.leagueId} value={league.leagueId}>{league.name}</option>)}
             </select>
           </div>
-          <form className="rounded border border-ink/10 bg-white p-4" onSubmit={createLeague}>
-            <h2 className="mb-3 font-semibold">Create League</h2>
-            <div className="flex gap-2">
-              <input className="min-w-0 flex-1 rounded border border-ink/20 px-3 py-2 text-sm" value={newLeagueName} onChange={(event) => setNewLeagueName(event.target.value)} placeholder="Family league" />
-              <button className="rounded bg-ink px-4 py-2 text-sm font-semibold text-white">Create</button>
-            </div>
-          </form>
+          <div className="rounded border border-ink/10 bg-white p-4">
+            <h2 className="mb-3 font-semibold">League Actions</h2>
+            <button className="rounded bg-ink px-4 py-2 text-sm font-semibold text-white" onClick={() => setShowCreateLeague(true)}>
+              Create League
+            </button>
+          </div>
           <form className="rounded border border-ink/10 bg-white p-4" onSubmit={invitePlayer}>
             <h2 className="mb-3 font-semibold">Invite Player</h2>
             <div className="flex gap-2">
@@ -202,8 +216,8 @@ export default function AdminPage() {
 
         {week ? (
           <form className="mb-6 rounded border border-ink/10 bg-white p-4" onSubmit={saveSettings}>
-            <h2 className="mb-3 text-xl font-semibold">Weekly Quotas</h2>
-            <div className="grid gap-3 md:grid-cols-[180px_180px_auto] md:items-end">
+            <h2 className="mb-3 text-xl font-semibold">Weekly Settings</h2>
+            <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-[160px_160px_240px_240px_auto] lg:items-end">
               <label className="text-sm font-semibold">
                 NFL picks
                 <input
@@ -230,8 +244,29 @@ export default function AdminPage() {
                   onChange={(event) => setNcaafQuota(Number(event.target.value))}
                 />
               </label>
+              <label className="text-sm font-semibold">
+                DraftKings capture
+                <input
+                  className="mt-1 w-full rounded border border-ink/20 px-3 py-2"
+                  disabled={savingSettings}
+                  type="datetime-local"
+                  value={scrapeAtLocal}
+                  onChange={(event) => setScrapeAtLocal(event.target.value)}
+                />
+              </label>
+              <label className="text-sm font-semibold">
+                Pick cutoff
+                <input
+                  className="mt-1 w-full rounded border border-ink/20 px-3 py-2"
+                  disabled={savingSettings}
+                  required
+                  type="datetime-local"
+                  value={cutoffAtLocal}
+                  onChange={(event) => setCutoffAtLocal(event.target.value)}
+                />
+              </label>
               <button className="rounded bg-ink px-4 py-2 text-sm font-semibold text-white disabled:bg-ink/35" disabled={savingSettings}>
-                {savingSettings ? "Saving..." : "Save Quotas"}
+                {savingSettings ? "Saving..." : "Save Settings"}
               </button>
             </div>
           </form>
@@ -297,6 +332,54 @@ export default function AdminPage() {
           ))}
         </section>
       </section>
+      {showCreateLeague ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/50 px-5">
+          <form className="w-full max-w-md rounded border border-ink/10 bg-white p-5 shadow-xl" onSubmit={createLeague}>
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <h2 className="text-xl font-semibold">Create League</h2>
+              <button className="rounded px-2 py-1 text-ink/60 hover:bg-ink/5" type="button" onClick={() => setShowCreateLeague(false)}>
+                Close
+              </button>
+            </div>
+            <label className="text-sm font-semibold">
+              League name
+              <input
+                autoFocus
+                className="mt-1 w-full rounded border border-ink/20 px-3 py-2"
+                disabled={creatingLeague}
+                value={newLeagueName}
+                onChange={(event) => setNewLeagueName(event.target.value)}
+                placeholder="Family league"
+              />
+            </label>
+            <div className="mt-5 flex justify-end gap-2">
+              <button className="rounded border border-ink/20 px-4 py-2 text-sm font-semibold" disabled={creatingLeague} type="button" onClick={() => setShowCreateLeague(false)}>
+                Cancel
+              </button>
+              <button className="rounded bg-ink px-4 py-2 text-sm font-semibold text-white disabled:bg-ink/35" disabled={creatingLeague || !newLeagueName.trim()}>
+                {creatingLeague ? "Creating..." : "Create"}
+              </button>
+            </div>
+          </form>
+        </div>
+      ) : null}
     </AppShell>
   );
+}
+
+function toDatetimeLocal(iso?: string): string {
+  if (!iso) {
+    return "";
+  }
+  const date = new Date(iso);
+  const pad = (value: number) => String(value).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+function fromDatetimeLocal(value: string): string {
+  return new Date(value).toISOString();
+}
+
+function formatDateTime(iso?: string): string {
+  return iso ? new Date(iso).toLocaleString() : "not set";
 }

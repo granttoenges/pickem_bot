@@ -118,6 +118,20 @@ export class PickemStack extends Stack {
     });
     table.grantReadWriteData(scraperFunction);
 
+    const scrapeSchedulerFunction = new NodejsFunction(this, "DraftKingsScrapeSchedulerFunction", {
+      runtime: Runtime.NODEJS_22_X,
+      functionName: `${resourcePrefix}-draftkings-scrape-scheduler`,
+      entry: "src/backend/scrapeScheduler.ts",
+      handler: "handler",
+      timeout: Duration.minutes(6),
+      environment: {
+        TABLE_NAME: table.tableName,
+        SCRAPER_FUNCTION_NAME: scraperFunction.functionName
+      }
+    });
+    table.grantReadWriteData(scrapeSchedulerFunction);
+    scraperFunction.grantInvoke(scrapeSchedulerFunction);
+
     const resultsFunction = new NodejsFunction(this, "ResultsSyncFunction", {
       runtime: Runtime.NODEJS_22_X,
       functionName: `${resourcePrefix}-results-sync`,
@@ -159,15 +173,11 @@ export class PickemStack extends Stack {
       integration: apiIntegration
     });
 
-    new Rule(this, "TuesdayOpeningLineScrapeRule", {
-      ruleName: `${resourcePrefix}-tuesday-opening-line-scrape`,
-      description: "Runs the DraftKings opening-line scrape once on Tuesday mornings during football season.",
-      schedule: Schedule.cron({
-        minute: "0",
-        hour: "15",
-        weekDay: "TUE"
-      }),
-      targets: [new LambdaFunction(scraperFunction)]
+    new Rule(this, "DraftKingsScrapeSchedulerRule", {
+      ruleName: `${resourcePrefix}-draftkings-scrape-scheduler`,
+      description: "Polls for league weeks whose configured DraftKings capture time is due.",
+      schedule: Schedule.rate(Duration.minutes(15)),
+      targets: [new LambdaFunction(scrapeSchedulerFunction)]
     });
 
     new Rule(this, "ResultsSyncRule", {

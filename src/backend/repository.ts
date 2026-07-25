@@ -115,6 +115,27 @@ export class PickemRepository {
     }));
   }
 
+  async listDueScrapeWeeks(nowIso: string): Promise<Week[]> {
+    const result = await client.send(new ScanCommand({
+      TableName: this.tableName,
+      FilterExpression: "entityType = :entityType and scrapeAt <= :now and (attribute_not_exists(scrapeStatus) or scrapeStatus = :pending)",
+      ExpressionAttributeValues: {
+        ":entityType": "Week",
+        ":now": nowIso,
+        ":pending": "pending"
+      }
+    }));
+    return (result.Items ?? []) as Week[];
+  }
+
+  async updateWeekScrapeStatus(week: Week, scrapeStatus: NonNullable<Week["scrapeStatus"]>, scrapeCompletedAt?: string): Promise<void> {
+    await this.putWeek({
+      ...week,
+      scrapeStatus,
+      scrapeCompletedAt
+    });
+  }
+
   async listGames(leagueId: string, seasonId: string, weekId: string): Promise<Game[]> {
     const result = await client.send(new QueryCommand({
       TableName: this.tableName,
