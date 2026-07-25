@@ -74,8 +74,7 @@ export default function PlayerBoardPage() {
     const sameSportCount = userPicks.filter((pick) => pick.sportLeague === option.sportLeague && pick.optionId !== replaceOptionId).length;
     const required = option.sportLeague === "NFL" ? week?.nflPickCountRequired : week?.ncaafPickCountRequired;
     if (!replaceOptionId && required !== undefined && sameSportCount >= required) {
-      setStatus(`Your ${option.sportLeague} card is full. Choose a pick from My Picks to change first.`);
-      setTab("mine");
+      setStatus(`Your ${option.sportLeague} card is full. Go to My Picks to change or release a pick first.`);
       return;
     }
     try {
