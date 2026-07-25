@@ -2,7 +2,7 @@
 
 import { FormEvent, useEffect, useState } from "react";
 import { AppShell } from "../../components/AppShell";
-import { TeamLogo } from "../../components/TeamLogo";
+import { GameOddsBoard } from "../../components/GameOddsBoard";
 import {
   apiGet,
   apiSend,
@@ -312,29 +312,14 @@ export default function AdminPage() {
           </section>
         </div>
 
-        <section className="rounded border border-ink/10 bg-white">
-          <div className="grid grid-cols-[90px_1.2fr_1fr_110px] gap-3 border-b border-ink/10 bg-ink/5 px-4 py-3 text-sm font-semibold text-ink/70 max-lg:hidden">
-            <span>Sport</span>
-            <span>Game</span>
-            <span>Options</span>
-            <span>Claims</span>
-          </div>
+        <section className="space-y-3">
           {games.map((game) => (
-            <article key={game.gameId} className="grid gap-3 border-b border-ink/10 px-4 py-4 last:border-b-0 lg:grid-cols-[90px_1.2fr_1fr_110px] lg:items-center">
-              <span className="w-fit rounded bg-turf/10 px-2 py-1 text-xs font-bold text-turf">{game.sportLeague}</span>
-              <div>
-                <div className="flex items-center gap-3 font-semibold">
-                  <TeamLogo teamName={game.awayTeam} size="sm" />
-                  <span>{game.awayTeam}</span>
-                  <span className="text-ink/40">at</span>
-                  <TeamLogo teamName={game.homeTeam} size="sm" />
-                  <span>{game.homeTeam}</span>
-                </div>
-                <div className="text-sm text-ink/60">{new Date(game.kickoffAt).toLocaleString()}</div>
+            <div key={game.gameId}>
+              <GameOddsBoard game={game} claims={claims} mode="summary" />
+              <div className="rounded-b border-x border-b border-ink/10 bg-white px-4 py-2 text-sm text-ink/60">
+                {game.options.length} claimable options · {claims.filter((claim) => game.options.some((option) => option.optionId === claim.optionId)).length} claimed
               </div>
-              <div className="text-sm text-ink/70">{game.options.length} claimable options</div>
-              <div className="text-sm font-semibold">{claims.filter((claim) => game.options.some((option) => option.optionId === claim.optionId)).length}</div>
-            </article>
+            </div>
           ))}
         </section>
       </section>

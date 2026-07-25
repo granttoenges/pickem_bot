@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { AppShell } from "../components/AppShell";
-import { TeamLogo } from "../components/TeamLogo";
+import { GameOddsBoard } from "../components/GameOddsBoard";
 import { apiGet, apiSend, AppLeague, GameWithOptions, PickClaim, PickOption, PickSummary, PlayerPick, Week, weekQuery } from "../lib/api";
 import { getPreferredLeagueId, persistPreferredLeagueId } from "../lib/leaguePreference";
 
@@ -111,7 +111,6 @@ export default function PlayerBoardPage() {
     }
   }
 
-  const claimByOption = new Map(claims.map((claim) => [claim.optionId, claim]));
   const userOptionIds = new Set(userPicks.map((pick) => pick.optionId));
 
   return (
@@ -163,39 +162,14 @@ export default function PlayerBoardPage() {
         {tab === "available" ? (
           <div className="space-y-3">
             {games.map((game) => (
-              <article key={game.gameId} className="rounded border border-ink/10 bg-white p-4">
-                <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
-                  <div>
-                    <span className="w-fit rounded bg-turf/10 px-2 py-1 text-xs font-bold text-turf">{game.sportLeague}</span>
-                    <div className="mt-2 flex items-center gap-3">
-                      <TeamLogo teamName={game.awayTeam} />
-                      <span className="text-sm font-semibold text-ink/45">at</span>
-                      <TeamLogo teamName={game.homeTeam} />
-                      <h2 className="min-w-0 text-lg font-semibold">{game.awayTeam} at {game.homeTeam}</h2>
-                    </div>
-                    <p className="text-sm text-ink/60">{new Date(game.kickoffAt).toLocaleString()}</p>
-                  </div>
-                  {game.adminNote ? <p className="max-w-md text-sm text-ink/60">{game.adminNote}</p> : null}
-                </div>
-                <div className="grid gap-2 md:grid-cols-2 lg:grid-cols-3">
-                  {game.options.map((option) => {
-                    const claim = claimByOption.get(option.optionId);
-                    const mine = userOptionIds.has(option.optionId);
-                    const disabled = locked || Boolean(claim && !mine);
-                    return (
-                      <button
-                        key={option.optionId}
-                        className={`min-h-[64px] rounded border px-3 py-2 text-left text-sm transition ${mine ? "border-gold bg-gold/20" : disabled ? "cursor-not-allowed border-ink/10 bg-ink/5 text-ink/35" : "border-ink/15 bg-white hover:border-turf hover:bg-turf/5"}`}
-                        disabled={disabled}
-                        onClick={() => claimOption(option)}
-                      >
-                        <div className="font-semibold">{option.label}</div>
-                        <div className="text-ink/55">{mine ? "Your pick" : claim ? "Claimed" : "Available"}</div>
-                      </button>
-                    );
-                  })}
-                </div>
-              </article>
+              <GameOddsBoard
+                key={game.gameId}
+                game={game}
+                claims={claims}
+                userOptionIds={userOptionIds}
+                locked={locked}
+                onPick={claimOption}
+              />
             ))}
             {!games.length && !status ? <div className="rounded border border-ink/10 bg-white p-6">No games are available for this league week yet.</div> : null}
           </div>
