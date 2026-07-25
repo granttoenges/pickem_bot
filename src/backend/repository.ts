@@ -148,6 +148,33 @@ export class PickemRepository {
     return ((result.Items ?? []) as Game[]).map(normalizeGame);
   }
 
+  async listSharedGames(leagueId: string, seasonId: string, weekId: string): Promise<Game[]> {
+    const result = await client.send(new QueryCommand({
+      TableName: this.tableName,
+      KeyConditionExpression: "pk = :pk and begins_with(sk, :prefix)",
+      ExpressionAttributeValues: {
+        ":pk": sourceWeekPk(seasonId, weekId),
+        ":prefix": "GAME#"
+      }
+    }));
+    return ((result.Items ?? []) as Game[]).map((game) => normalizeGame({ ...game, leagueId }));
+  }
+
+  async listWeekGames(leagueId: string, seasonId: string, weekId: string): Promise<Game[]> {
+    const [sharedGames, leagueGames] = await Promise.all([
+      this.listSharedGames(leagueId, seasonId, weekId),
+      this.listGames(leagueId, seasonId, weekId)
+    ]);
+    const merged = new Map<string, Game>();
+    for (const game of sharedGames) {
+      merged.set(game.gameId, game);
+    }
+    for (const game of leagueGames) {
+      merged.set(game.gameId, game);
+    }
+    return [...merged.values()].sort((a, b) => a.kickoffAt.localeCompare(b.kickoffAt));
+  }
+
   async putGame(game: Game): Promise<void> {
     const normalized = normalizeGame(game);
     await client.send(new PutCommand({
@@ -157,6 +184,20 @@ export class PickemRepository {
         sk: `GAME#${normalized.gameId}`,
         entityType: "Game",
         ...normalized
+      }
+    }));
+  }
+
+  async putSharedGame(game: Game): Promise<void> {
+    const normalized = normalizeGame(game);
+    await client.send(new PutCommand({
+      TableName: this.tableName,
+      Item: {
+        pk: sourceWeekPk(normalized.seasonId, normalized.weekId),
+        sk: `GAME#${normalized.gameId}`,
+        entityType: "SharedGame",
+        ...normalized,
+        leagueId: "shared"
       }
     }));
   }
@@ -390,6 +431,10 @@ function normalizeGame(game: Game): Game {
 
 function weekPk(leagueId: string, seasonId: string, weekId: string): string {
   return `LEAGUE#${leagueId}#WEEK#${seasonId}#${weekId}`;
+}
+
+function sourceWeekPk(seasonId: string, weekId: string): string {
+  return `SOURCE#WEEK#${seasonId}#${weekId}`;
 }
 
 function optionsPk(leagueId: string, seasonId: string, weekId: string): string {

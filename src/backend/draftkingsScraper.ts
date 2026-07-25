@@ -20,7 +20,7 @@ export async function handler(event: EventBridgeEvent<"Scheduled Event", Scraper
 }> {
   const seasonId = event.detail?.seasonId ?? process.env.DEFAULT_SEASON_ID ?? new Date().getUTCFullYear().toString();
   const weekId = event.detail?.weekId ?? process.env.DEFAULT_WEEK_ID ?? "current";
-  const leagueId = event.detail?.leagueId ?? process.env.DEFAULT_APP_LEAGUE_ID ?? "friends";
+  const leagueId = event.detail?.leagueId ?? process.env.DEFAULT_APP_LEAGUE_ID ?? "shared";
   const capturedAt = new Date().toISOString();
   const repository = new PickemRepository();
   const games: Game[] = [];
@@ -39,7 +39,7 @@ export async function handler(event: EventBridgeEvent<"Scheduled Event", Scraper
   }
 
   for (const game of games) {
-    await repository.putGame(game);
+    await repository.putSharedGame(game);
   }
 
   let skipped = 0;
@@ -78,7 +78,7 @@ async function fetchPage(url: string): Promise<string> {
   return response.text();
 }
 
-function parseDraftKingsPage(
+export function parseDraftKingsPage(
   html: string,
   leagueId: string,
   league: "NFL" | "NCAAF",
@@ -118,19 +118,63 @@ function parseDraftKingsPage(
       overrideSource: "draftkings"
     });
 
-    const spread = firstNumber(event, ["homeSpread", "spread", "line"]);
+    const rawPayload = safeOriginalPayload(event, sourceUrl, index);
+    const marketIds = collectMarketIds(event);
+    const spread = firstNumber(event, ["homeSpread", "homeSpreadPoints", "spread", "line", "points"]);
     if (spread !== undefined) {
       lines.push({
         gameId,
         market: "spread",
         source: "draftkings",
         capturedAt,
+        sourceUrl,
+        draftkingsMarketIds: marketIds,
         homeSpread: spread,
         awaySpread: -spread,
-        originalPayload: { sourceUrl, eventIndex: index }
+        homeSpreadOdds: firstNumber(event, ["homeSpreadOdds", "homeSpreadPrice", "homeSpreadAmericanOdds", "homeSpreadDecimalOdds"]),
+        awaySpreadOdds: firstNumber(event, ["awaySpreadOdds", "awaySpreadPrice", "awaySpreadAmericanOdds", "awaySpreadDecimalOdds"]),
+        originalPayload: rawPayload,
+        rawPayloadTrimmed: isTrimmedPayload(rawPayload)
       });
     }
 
+    const homeTeamTotal = firstNumber(event, ["homeTeamTotal", "homeTotal", "homeTeamTotalPoints", "homePoints"]);
+    const awayTeamTotal = firstNumber(event, ["awayTeamTotal", "awayTotal", "awayTeamTotalPoints", "awayPoints"]);
+    if (homeTeamTotal !== undefined || awayTeamTotal !== undefined) {
+      lines.push({
+        gameId,
+        market: "team_total",
+        source: "draftkings",
+        capturedAt,
+        sourceUrl,
+        draftkingsMarketIds: marketIds,
+        homeTeamTotal,
+        awayTeamTotal,
+        homeTeamTotalOverOdds: firstNumber(event, ["homeTeamTotalOverOdds", "homeOverOdds", "homeTeamOverPrice"]),
+        homeTeamTotalUnderOdds: firstNumber(event, ["homeTeamTotalUnderOdds", "homeUnderOdds", "homeTeamUnderPrice"]),
+        awayTeamTotalOverOdds: firstNumber(event, ["awayTeamTotalOverOdds", "awayOverOdds", "awayTeamOverPrice"]),
+        awayTeamTotalUnderOdds: firstNumber(event, ["awayTeamTotalUnderOdds", "awayUnderOdds", "awayTeamUnderPrice"]),
+        originalPayload: rawPayload,
+        rawPayloadTrimmed: isTrimmedPayload(rawPayload)
+      });
+    }
+
+    const homeMoneyline = firstNumber(event, ["homeMoneyline", "homeMoneyLine", "homeMl", "homeOdds", "homePrice"]);
+    const awayMoneyline = firstNumber(event, ["awayMoneyline", "awayMoneyLine", "awayMl", "awayOdds", "awayPrice"]);
+    if (homeMoneyline !== undefined || awayMoneyline !== undefined) {
+      lines.push({
+        gameId,
+        market: "moneyline",
+        source: "draftkings",
+        capturedAt,
+        sourceUrl,
+        draftkingsMarketIds: marketIds,
+        homeMoneyline,
+        awayMoneyline,
+        originalPayload: rawPayload,
+        rawPayloadTrimmed: isTrimmedPayload(rawPayload)
+      });
+    }
   }
 
   return { games, lines };
@@ -193,6 +237,41 @@ function firstNumber(node: Record<string, unknown>, keys: string[]): number | un
     }
   }
   return undefined;
+}
+
+function collectMarketIds(node: Record<string, unknown>): string[] {
+  const ids = new Set<string>();
+  visit(node, (value) => {
+    for (const key of ["marketId", "market_id", "id", "selectionId", "selection_id", "outcomeId", "outcome_id"]) {
+      const item = value[key];
+      if (typeof item === "string" && item.trim()) {
+        ids.add(item.trim());
+      }
+      if (typeof item === "number") {
+        ids.add(String(item));
+      }
+    }
+  });
+  return [...ids].slice(0, 50);
+}
+
+function safeOriginalPayload(event: Record<string, unknown>, sourceUrl: string, eventIndex: number): unknown {
+  const raw = { sourceUrl, eventIndex, event };
+  const serialized = JSON.stringify(raw);
+  if (serialized.length <= 300_000) {
+    return raw;
+  }
+  return {
+    sourceUrl,
+    eventIndex,
+    trimmed: true,
+    topLevelKeys: Object.keys(event).slice(0, 100),
+    draftkingsMarketIds: collectMarketIds(event)
+  };
+}
+
+function isTrimmedPayload(payload: unknown): boolean {
+  return Boolean(payload && typeof payload === "object" && "trimmed" in payload);
 }
 
 function stableGameId(league: string, kickoffAt: string, awayTeam: string, homeTeam: string): string {

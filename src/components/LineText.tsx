@@ -12,11 +12,25 @@ export function LineText({ game, market }: { game: GameWithOptions; market: Mark
       </span>
     );
   }
+  if (market === "moneyline") {
+    return (
+      <span>
+        {game.awayTeam} {formatMoneyline(line.awayMoneyline)} / {game.homeTeam} {formatMoneyline(line.homeMoneyline)}
+      </span>
+    );
+  }
   return (
     <span>
       {game.awayTeam} total {formatSpread(line.awayTeamTotal)} / {game.homeTeam} total {formatSpread(line.homeTeamTotal)}
     </span>
   );
+}
+
+function formatMoneyline(value?: number): string {
+  if (value === undefined) {
+    return "--";
+  }
+  return value > 0 ? `+${value}` : `${value}`;
 }
 
 function formatSpread(value?: number): string {

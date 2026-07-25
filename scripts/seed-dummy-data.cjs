@@ -90,7 +90,7 @@ async function seedGames(sportLeague, rows, kickoffAt) {
       status: "scheduled",
       overrideSource: "admin_override"
     };
-    await put(`LEAGUE#${leagueId}#WEEK#${seasonId}#${weekId}`, `GAME#${gameId}`, { entityType: "Game", ...game });
+    await put(`SOURCE#WEEK#${seasonId}#${weekId}`, `GAME#${gameId}`, { entityType: "SharedGame", ...game, leagueId: "shared" });
 
     await put(`GAME#${gameId}`, "OPENING_LINE#spread", {
       entityType: "OpeningLine",

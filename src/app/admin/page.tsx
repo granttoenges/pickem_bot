@@ -16,6 +16,7 @@ import {
   weekQuery
 } from "../../lib/api";
 import { getPreferredLeagueId, persistPreferredLeagueId } from "../../lib/leaguePreference";
+import { isValidQuotaInput, parseQuotaInput } from "../../lib/quotaInput";
 
 export default function AdminPage() {
   const [leagues, setLeagues] = useState<AppLeague[]>([]);
@@ -28,8 +29,8 @@ export default function AdminPage() {
   const [scrapeRuns, setScrapeRuns] = useState<ScrapeRun[]>([]);
   const [inviteEmail, setInviteEmail] = useState("");
   const [newLeagueName, setNewLeagueName] = useState("");
-  const [nflQuota, setNflQuota] = useState(3);
-  const [ncaafQuota, setNcaafQuota] = useState(3);
+  const [nflQuota, setNflQuota] = useState("3");
+  const [ncaafQuota, setNcaafQuota] = useState("3");
   const [scrapeAtLocal, setScrapeAtLocal] = useState("");
   const [cutoffAtLocal, setCutoffAtLocal] = useState("");
   const [savingSettings, setSavingSettings] = useState(false);
@@ -71,8 +72,8 @@ export default function AdminPage() {
       setPicks(payload.picks);
       setScrapeRuns(payload.scrapeRuns);
       setMembers(payload.members);
-      setNflQuota(payload.week.nflPickCountRequired);
-      setNcaafQuota(payload.week.ncaafPickCountRequired);
+      setNflQuota(String(payload.week.nflPickCountRequired));
+      setNcaafQuota(String(payload.week.ncaafPickCountRequired));
       setScrapeAtLocal(toDatetimeLocal(payload.week.scrapeAt));
       setCutoffAtLocal(toDatetimeLocal(payload.week.cutoffAt));
       setStatus("");
@@ -86,21 +87,26 @@ export default function AdminPage() {
     if (!week) {
       return;
     }
-    const form = new FormData(event.currentTarget);
+    const nflPickCountRequired = parseQuotaInput(nflQuota);
+    const ncaafPickCountRequired = parseQuotaInput(ncaafQuota);
+    if (nflPickCountRequired === undefined || ncaafPickCountRequired === undefined) {
+      setStatus("Enter valid NFL and CFB quotas from 0 to 20.");
+      return;
+    }
     setSavingSettings(true);
     try {
       const payload = await apiSend<{ week: Week }>("/admin/week/settings", "PUT", {
         leagueId: week.leagueId,
         seasonId: week.seasonId,
         weekId: week.weekId,
-        nflPickCountRequired: Number(form.get("nflPickCountRequired") ?? nflQuota),
-        ncaafPickCountRequired: Number(form.get("ncaafPickCountRequired") ?? ncaafQuota),
+        nflPickCountRequired,
+        ncaafPickCountRequired,
         scrapeAt: scrapeAtLocal ? fromDatetimeLocal(scrapeAtLocal) : undefined,
         cutoffAt: fromDatetimeLocal(cutoffAtLocal)
       });
       setWeek(payload.week);
-      setNflQuota(payload.week.nflPickCountRequired);
-      setNcaafQuota(payload.week.ncaafPickCountRequired);
+      setNflQuota(String(payload.week.nflPickCountRequired));
+      setNcaafQuota(String(payload.week.ncaafPickCountRequired));
       setScrapeAtLocal(toDatetimeLocal(payload.week.scrapeAt));
       setCutoffAtLocal(toDatetimeLocal(payload.week.cutoffAt));
       setStatus("Weekly quotas saved.");
@@ -228,7 +234,7 @@ export default function AdminPage() {
                   min="0"
                   max="20"
                   value={nflQuota}
-                  onChange={(event) => setNflQuota(Number(event.target.value))}
+                  onChange={(event) => setNflQuota(event.target.value)}
                 />
               </label>
               <label className="text-sm font-semibold">
@@ -241,7 +247,7 @@ export default function AdminPage() {
                   min="0"
                   max="20"
                   value={ncaafQuota}
-                  onChange={(event) => setNcaafQuota(Number(event.target.value))}
+                  onChange={(event) => setNcaafQuota(event.target.value)}
                 />
               </label>
               <label className="text-sm font-semibold">
@@ -265,7 +271,7 @@ export default function AdminPage() {
                   onChange={(event) => setCutoffAtLocal(event.target.value)}
                 />
               </label>
-              <button className="rounded bg-ink px-4 py-2 text-sm font-semibold text-white disabled:bg-ink/35" disabled={savingSettings}>
+              <button className="rounded bg-ink px-4 py-2 text-sm font-semibold text-white disabled:bg-ink/35" disabled={savingSettings || !isValidQuotaInput(nflQuota) || !isValidQuotaInput(ncaafQuota)}>
                 {savingSettings ? "Saving..." : "Save Settings"}
               </button>
             </div>

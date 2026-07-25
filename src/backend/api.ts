@@ -143,7 +143,7 @@ export async function handler(event: APIGatewayProxyEventV2WithJWTAuthorizer): P
       await requireLeagueAccess(repository, auth, leagueId);
       const [week, games, options, claims, userPicks] = await Promise.all([
         repository.getWeek(leagueId, seasonId, weekId),
-        repository.listGames(leagueId, seasonId, weekId),
+        repository.listWeekGames(leagueId, seasonId, weekId),
         repository.listPickOptions(leagueId, seasonId, weekId),
         repository.listClaims(leagueId, seasonId, weekId),
         repository.listUserPicks(leagueId, seasonId, weekId, auth.userId)
@@ -164,7 +164,7 @@ export async function handler(event: APIGatewayProxyEventV2WithJWTAuthorizer): P
       await requireLeagueAdmin(repository, auth, leagueId);
       const [week, games, options, claims, picks, scrapeRuns, members] = await Promise.all([
         repository.getWeek(leagueId, seasonId, weekId),
-        repository.listGames(leagueId, seasonId, weekId),
+        repository.listWeekGames(leagueId, seasonId, weekId),
         repository.listPickOptions(leagueId, seasonId, weekId),
         repository.listClaims(leagueId, seasonId, weekId),
         repository.listPicks(leagueId, seasonId, weekId),
@@ -214,7 +214,7 @@ export async function handler(event: APIGatewayProxyEventV2WithJWTAuthorizer): P
       await requireLeagueAccess(repository, auth, body.leagueId);
       const [week, options, currentPicks] = await Promise.all([
         repository.getWeek(body.leagueId, body.seasonId, body.weekId),
-        repository.listPickOptions(body.leagueId, body.seasonId, body.weekId),
+        listAvailablePickOptions(repository, body.leagueId, body.seasonId, body.weekId),
         repository.listUserPicks(body.leagueId, body.seasonId, body.weekId, auth.userId)
       ]);
       if (!week) {
@@ -281,12 +281,117 @@ export async function handler(event: APIGatewayProxyEventV2WithJWTAuthorizer): P
   }
 }
 
-async function withOptions(repository: PickemRepository, games: Game[], options: PickOption[]): Promise<GameWithOptions[]> {
-  return Promise.all(games.map(async (game) => ({
-    ...game,
-    lines: await repository.listOpeningLines(game.gameId),
-    options: options.filter((option) => option.gameId === game.gameId)
-  })));
+async function listAvailablePickOptions(repository: PickemRepository, leagueId: string, seasonId: string, weekId: string): Promise<PickOption[]> {
+  const [games, persistedOptions] = await Promise.all([
+    repository.listWeekGames(leagueId, seasonId, weekId),
+    repository.listPickOptions(leagueId, seasonId, weekId)
+  ]);
+  const gamesWithOptions = await withOptions(repository, games, persistedOptions);
+  return gamesWithOptions.flatMap((game) => game.options);
+}
+
+async function withOptions(repository: PickemRepository, games: Game[], persistedOptions: PickOption[]): Promise<GameWithOptions[]> {
+  return Promise.all(games.map(async (game) => {
+    const lines = await repository.listOpeningLines(game.gameId);
+    const options = new Map<string, PickOption>();
+    for (const option of buildPickOptions(game, lines)) {
+      options.set(option.optionId, option);
+    }
+    for (const option of persistedOptions.filter((item) => item.gameId === game.gameId)) {
+      options.set(option.optionId, option);
+    }
+    return {
+      ...game,
+      lines,
+      options: [...options.values()]
+    };
+  }));
+}
+
+function buildPickOptions(game: Game, lines: GameWithOptions["lines"]): PickOption[] {
+  const base = {
+    leagueId: game.leagueId,
+    seasonId: game.seasonId,
+    weekId: game.weekId,
+    gameId: game.gameId,
+    sportLeague: game.sportLeague
+  };
+  const spread = lines.find((line) => line.market === "spread");
+  const teamTotal = lines.find((line) => line.market === "team_total");
+  const options: PickOption[] = [];
+
+  if (spread?.awaySpread !== undefined) {
+    options.push({
+      ...base,
+      optionId: `${game.gameId}-away-spread`,
+      team: game.awayTeam,
+      market: "spread",
+      side: "away",
+      lineValue: spread.awaySpread,
+      label: `${game.awayTeam} ${formatSigned(spread.awaySpread)}`
+    });
+  }
+  if (spread?.homeSpread !== undefined) {
+    options.push({
+      ...base,
+      optionId: `${game.gameId}-home-spread`,
+      team: game.homeTeam,
+      market: "spread",
+      side: "home",
+      lineValue: spread.homeSpread,
+      label: `${game.homeTeam} ${formatSigned(spread.homeSpread)}`
+    });
+  }
+  if (teamTotal?.awayTeamTotal !== undefined) {
+    options.push(
+      {
+        ...base,
+        optionId: `${game.gameId}-away-total-over`,
+        team: game.awayTeam,
+        market: "team_total",
+        side: "over",
+        lineValue: teamTotal.awayTeamTotal,
+        label: `${game.awayTeam} over ${teamTotal.awayTeamTotal}`
+      },
+      {
+        ...base,
+        optionId: `${game.gameId}-away-total-under`,
+        team: game.awayTeam,
+        market: "team_total",
+        side: "under",
+        lineValue: teamTotal.awayTeamTotal,
+        label: `${game.awayTeam} under ${teamTotal.awayTeamTotal}`
+      }
+    );
+  }
+  if (teamTotal?.homeTeamTotal !== undefined) {
+    options.push(
+      {
+        ...base,
+        optionId: `${game.gameId}-home-total-over`,
+        team: game.homeTeam,
+        market: "team_total",
+        side: "over",
+        lineValue: teamTotal.homeTeamTotal,
+        label: `${game.homeTeam} over ${teamTotal.homeTeamTotal}`
+      },
+      {
+        ...base,
+        optionId: `${game.gameId}-home-total-under`,
+        team: game.homeTeam,
+        market: "team_total",
+        side: "under",
+        lineValue: teamTotal.homeTeamTotal,
+        label: `${game.homeTeam} under ${teamTotal.homeTeamTotal}`
+      }
+    );
+  }
+
+  return options;
+}
+
+function formatSigned(value: number): string {
+  return value > 0 ? `+${value}` : `${value}`;
 }
 
 function defaultWeek(leagueId: string, seasonId: string, weekId: string): Week {

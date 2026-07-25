@@ -1,7 +1,7 @@
 export type SportLeague = "NFL" | "NCAAF";
 export type AppLeagueStatus = "active" | "archived";
 export type LeagueMemberRole = "league_admin" | "player";
-export type Market = "spread" | "team_total";
+export type Market = "spread" | "team_total" | "moneyline";
 export type PickSide = "home" | "away" | "over" | "under";
 export type PickResult = "win" | "loss" | "push" | "pending";
 
@@ -57,10 +57,21 @@ export interface OpeningLine {
   market: Market;
   source: "draftkings" | "admin_override" | "seed";
   capturedAt: string;
+  sourceUrl?: string;
+  draftkingsMarketIds?: string[];
   homeSpread?: number;
   awaySpread?: number;
+  homeSpreadOdds?: number;
+  awaySpreadOdds?: number;
   homeTeamTotal?: number;
   awayTeamTotal?: number;
+  homeTeamTotalOverOdds?: number;
+  homeTeamTotalUnderOdds?: number;
+  awayTeamTotalOverOdds?: number;
+  awayTeamTotalUnderOdds?: number;
+  homeMoneyline?: number;
+  awayMoneyline?: number;
+  rawPayloadTrimmed?: boolean;
   originalPayload?: unknown;
 }
 
