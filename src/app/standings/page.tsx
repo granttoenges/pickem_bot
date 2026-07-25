@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { AppShell } from "../../components/AppShell";
 import { apiGet, AppLeague, Standing } from "../../lib/api";
 import { appConfig } from "../../lib/config";
+import { getPreferredLeagueId, persistPreferredLeagueId } from "../../lib/leaguePreference";
 
 export default function StandingsPage() {
   const [standings, setStandings] = useState<Standing[]>([]);
@@ -15,7 +16,7 @@ export default function StandingsPage() {
     apiGet<{ leagues: AppLeague[] }>("/leagues")
       .then((payload) => {
         setLeagues(payload.leagues);
-        setActiveLeagueId(payload.leagues[0]?.leagueId ?? "");
+        setActiveLeagueId(getPreferredLeagueId(payload.leagues));
         if (!payload.leagues.length) {
           setStatus("You are not a member of a league yet.");
         }
@@ -41,7 +42,14 @@ export default function StandingsPage() {
         <div className="flex flex-wrap items-end justify-between gap-4">
           <h1 className="text-4xl font-semibold">Season Standings</h1>
           {leagues.length > 1 ? (
-            <select className="rounded border border-ink/20 bg-white px-3 py-2" value={activeLeagueId} onChange={(event) => setActiveLeagueId(event.target.value)}>
+            <select
+              className="rounded border border-ink/20 bg-white px-3 py-2"
+              value={activeLeagueId}
+              onChange={(event) => {
+                setActiveLeagueId(event.target.value);
+                persistPreferredLeagueId(event.target.value);
+              }}
+            >
               {leagues.map((league) => <option key={league.leagueId} value={league.leagueId}>{league.name}</option>)}
             </select>
           ) : null}

@@ -2,6 +2,7 @@
 
 import { FormEvent, useEffect, useState } from "react";
 import { AppShell } from "../../components/AppShell";
+import { TeamLogo } from "../../components/TeamLogo";
 import {
   apiGet,
   apiSend,
@@ -14,6 +15,7 @@ import {
   Week,
   weekQuery
 } from "../../lib/api";
+import { getPreferredLeagueId, persistPreferredLeagueId } from "../../lib/leaguePreference";
 
 export default function AdminPage() {
   const [leagues, setLeagues] = useState<AppLeague[]>([]);
@@ -26,13 +28,16 @@ export default function AdminPage() {
   const [scrapeRuns, setScrapeRuns] = useState<ScrapeRun[]>([]);
   const [inviteEmail, setInviteEmail] = useState("");
   const [newLeagueName, setNewLeagueName] = useState("");
+  const [nflQuota, setNflQuota] = useState(3);
+  const [ncaafQuota, setNcaafQuota] = useState(3);
+  const [savingSettings, setSavingSettings] = useState(false);
   const [status, setStatus] = useState("Loading admin board...");
 
   useEffect(() => {
     apiGet<{ leagues: AppLeague[] }>("/leagues")
       .then((payload) => {
         setLeagues(payload.leagues);
-        setActiveLeagueId(payload.leagues[0]?.leagueId ?? "");
+        setActiveLeagueId(getPreferredLeagueId(payload.leagues));
         if (!payload.leagues.length) {
           setStatus("No leagues exist yet.");
         }
@@ -62,6 +67,8 @@ export default function AdminPage() {
       setPicks(payload.picks);
       setScrapeRuns(payload.scrapeRuns);
       setMembers(payload.members);
+      setNflQuota(payload.week.nflPickCountRequired);
+      setNcaafQuota(payload.week.ncaafPickCountRequired);
       setStatus("");
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Could not load admin board.");
@@ -74,18 +81,23 @@ export default function AdminPage() {
       return;
     }
     const form = new FormData(event.currentTarget);
+    setSavingSettings(true);
     try {
       const payload = await apiSend<{ week: Week }>("/admin/week/settings", "PUT", {
         leagueId: week.leagueId,
         seasonId: week.seasonId,
         weekId: week.weekId,
-        nflPickCountRequired: Number(form.get("nflPickCountRequired")),
-        ncaafPickCountRequired: Number(form.get("ncaafPickCountRequired"))
+        nflPickCountRequired: Number(form.get("nflPickCountRequired") ?? nflQuota),
+        ncaafPickCountRequired: Number(form.get("ncaafPickCountRequired") ?? ncaafQuota)
       });
       setWeek(payload.week);
+      setNflQuota(payload.week.nflPickCountRequired);
+      setNcaafQuota(payload.week.ncaafPickCountRequired);
       setStatus("Weekly quotas saved.");
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Could not save quotas.");
+    } finally {
+      setSavingSettings(false);
     }
   }
 
@@ -113,6 +125,7 @@ export default function AdminPage() {
       const payload = await apiSend<{ league: AppLeague }>("/admin/leagues", "POST", { name: newLeagueName });
       setLeagues((current) => [...current, payload.league]);
       setActiveLeagueId(payload.league.leagueId);
+      persistPreferredLeagueId(payload.league.leagueId);
       setNewLeagueName("");
       setStatus("League created.");
     } catch (error) {
@@ -160,7 +173,14 @@ export default function AdminPage() {
         <div className="mb-6 grid gap-4 lg:grid-cols-3">
           <div className="rounded border border-ink/10 bg-white p-4">
             <h2 className="mb-3 font-semibold">Active League</h2>
-            <select className="w-full rounded border border-ink/20 bg-white px-3 py-2" value={activeLeagueId} onChange={(event) => setActiveLeagueId(event.target.value)}>
+            <select
+              className="w-full rounded border border-ink/20 bg-white px-3 py-2"
+              value={activeLeagueId}
+              onChange={(event) => {
+                setActiveLeagueId(event.target.value);
+                persistPreferredLeagueId(event.target.value);
+              }}
+            >
               {leagues.map((league) => <option key={league.leagueId} value={league.leagueId}>{league.name}</option>)}
             </select>
           </div>
@@ -186,13 +206,33 @@ export default function AdminPage() {
             <div className="grid gap-3 md:grid-cols-[180px_180px_auto] md:items-end">
               <label className="text-sm font-semibold">
                 NFL picks
-                <input className="mt-1 w-full rounded border border-ink/20 px-3 py-2" name="nflPickCountRequired" type="number" min="0" max="20" defaultValue={week.nflPickCountRequired} />
+                <input
+                  className="mt-1 w-full rounded border border-ink/20 px-3 py-2"
+                  disabled={savingSettings}
+                  name="nflPickCountRequired"
+                  type="number"
+                  min="0"
+                  max="20"
+                  value={nflQuota}
+                  onChange={(event) => setNflQuota(Number(event.target.value))}
+                />
               </label>
               <label className="text-sm font-semibold">
                 CFB picks
-                <input className="mt-1 w-full rounded border border-ink/20 px-3 py-2" name="ncaafPickCountRequired" type="number" min="0" max="20" defaultValue={week.ncaafPickCountRequired} />
+                <input
+                  className="mt-1 w-full rounded border border-ink/20 px-3 py-2"
+                  disabled={savingSettings}
+                  name="ncaafPickCountRequired"
+                  type="number"
+                  min="0"
+                  max="20"
+                  value={ncaafQuota}
+                  onChange={(event) => setNcaafQuota(Number(event.target.value))}
+                />
               </label>
-              <button className="rounded bg-ink px-4 py-2 text-sm font-semibold text-white">Save Quotas</button>
+              <button className="rounded bg-ink px-4 py-2 text-sm font-semibold text-white disabled:bg-ink/35" disabled={savingSettings}>
+                {savingSettings ? "Saving..." : "Save Quotas"}
+              </button>
             </div>
           </form>
         ) : null}
@@ -242,7 +282,13 @@ export default function AdminPage() {
             <article key={game.gameId} className="grid gap-3 border-b border-ink/10 px-4 py-4 last:border-b-0 lg:grid-cols-[90px_1.2fr_1fr_110px] lg:items-center">
               <span className="w-fit rounded bg-turf/10 px-2 py-1 text-xs font-bold text-turf">{game.sportLeague}</span>
               <div>
-                <div className="font-semibold">{game.awayTeam} at {game.homeTeam}</div>
+                <div className="flex items-center gap-3 font-semibold">
+                  <TeamLogo teamName={game.awayTeam} size="sm" />
+                  <span>{game.awayTeam}</span>
+                  <span className="text-ink/40">at</span>
+                  <TeamLogo teamName={game.homeTeam} size="sm" />
+                  <span>{game.homeTeam}</span>
+                </div>
                 <div className="text-sm text-ink/60">{new Date(game.kickoffAt).toLocaleString()}</div>
               </div>
               <div className="text-sm text-ink/70">{game.options.length} claimable options</div>

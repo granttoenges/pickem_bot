@@ -2,7 +2,9 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { AppShell } from "../components/AppShell";
+import { TeamLogo } from "../components/TeamLogo";
 import { apiGet, apiSend, AppLeague, GameWithOptions, PickClaim, PickOption, PickSummary, PlayerPick, Week, weekQuery } from "../lib/api";
+import { getPreferredLeagueId, persistPreferredLeagueId } from "../lib/leaguePreference";
 
 type Tab = "available" | "mine";
 
@@ -24,7 +26,7 @@ export default function PlayerBoardPage() {
     apiGet<{ leagues: AppLeague[] }>("/leagues")
       .then((payload) => {
         setLeagues(payload.leagues);
-        setActiveLeagueId(payload.leagues[0]?.leagueId ?? "");
+        setActiveLeagueId(getPreferredLeagueId(payload.leagues));
         if (!payload.leagues.length) {
           setStatus("You are not a member of a league yet.");
         }
@@ -123,7 +125,14 @@ export default function PlayerBoardPage() {
           </div>
           <div className="flex flex-wrap items-center gap-3">
             {leagues.length > 1 ? (
-              <select className="rounded border border-ink/20 bg-white px-3 py-2" value={activeLeagueId} onChange={(event) => setActiveLeagueId(event.target.value)}>
+              <select
+                className="rounded border border-ink/20 bg-white px-3 py-2"
+                value={activeLeagueId}
+                onChange={(event) => {
+                  setActiveLeagueId(event.target.value);
+                  persistPreferredLeagueId(event.target.value);
+                }}
+              >
                 {leagues.map((league) => <option key={league.leagueId} value={league.leagueId}>{league.name}</option>)}
               </select>
             ) : null}
@@ -158,7 +167,12 @@ export default function PlayerBoardPage() {
                 <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
                   <div>
                     <span className="w-fit rounded bg-turf/10 px-2 py-1 text-xs font-bold text-turf">{game.sportLeague}</span>
-                    <h2 className="mt-2 text-lg font-semibold">{game.awayTeam} at {game.homeTeam}</h2>
+                    <div className="mt-2 flex items-center gap-3">
+                      <TeamLogo teamName={game.awayTeam} />
+                      <span className="text-sm font-semibold text-ink/45">at</span>
+                      <TeamLogo teamName={game.homeTeam} />
+                      <h2 className="min-w-0 text-lg font-semibold">{game.awayTeam} at {game.homeTeam}</h2>
+                    </div>
                     <p className="text-sm text-ink/60">{new Date(game.kickoffAt).toLocaleString()}</p>
                   </div>
                   {game.adminNote ? <p className="max-w-md text-sm text-ink/60">{game.adminNote}</p> : null}
