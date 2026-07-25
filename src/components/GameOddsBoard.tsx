@@ -27,8 +27,8 @@ export function GameOddsBoard({
   const homeUnder = findOption(game, "home-total-under");
 
   return (
-    <article className="w-full overflow-hidden rounded-md border border-ink/10 bg-white text-ink shadow-sm">
-      <header className="border-b border-ink/10 bg-field px-4 py-4">
+    <article className="w-full overflow-hidden rounded-md border border-ink/15 bg-white text-ink shadow-md ring-1 ring-ink/5">
+      <header className="border-b border-ink/15 bg-field px-4 py-4">
         <div className="flex items-center justify-between gap-3">
           <span className="rounded bg-ink px-3 py-1 text-xs font-extrabold tracking-wide text-white">{game.sportLeague}</span>
           <span className="text-xs font-semibold text-ink/50">{new Date(game.kickoffAt).toLocaleString()}</span>
@@ -43,7 +43,7 @@ export function GameOddsBoard({
 
       <div className="overflow-x-auto">
         <div className="min-w-[520px]">
-          <div className="grid grid-cols-[minmax(220px,1fr)_minmax(132px,180px)_minmax(180px,240px)] border-b border-ink/10 bg-ink/5 px-3 py-3 text-[11px] font-extrabold uppercase tracking-wide text-ink/55">
+          <div className="grid grid-cols-[minmax(220px,1fr)_minmax(132px,180px)_minmax(180px,240px)] border-b border-ink/15 bg-ink/5 px-3 py-3 text-[11px] font-extrabold uppercase tracking-wide text-ink/55">
             <span>Game</span>
             <span className="text-center">Spread</span>
             <span className="text-center">Team Total</span>
@@ -107,13 +107,13 @@ function TeamMarketRow({
   onPick?: (option: PickOption) => void;
 }) {
   return (
-    <div className="grid min-h-[72px] grid-cols-[minmax(220px,1fr)_minmax(132px,180px)_minmax(180px,240px)] items-stretch border-b border-ink/10 last:border-b-0">
+    <div className="grid min-h-[72px] grid-cols-[minmax(220px,1fr)_minmax(132px,180px)_minmax(180px,240px)] items-stretch border-b border-ink/15 last:border-b-0">
       <div className="flex min-w-0 items-center gap-3 px-3 py-3">
         <TeamLogo teamName={teamName} size="sm" />
         <span className="min-w-0 truncate text-sm font-bold text-ink">{teamName}</span>
       </div>
       <OptionCell option={spread} claimByOption={claimByOption} userOptionIds={userOptionIds} locked={locked} mode={mode} onPick={onPick} />
-      <div className="grid grid-cols-2 gap-px border-l border-ink/10 bg-ink/10 p-px">
+      <div className="grid grid-cols-2 gap-px border-l border-ink/15 bg-ink/10 p-px">
         <OptionCell option={over} claimByOption={claimByOption} userOptionIds={userOptionIds} locked={locked} mode={mode} onPick={onPick} compact />
         <OptionCell option={under} claimByOption={claimByOption} userOptionIds={userOptionIds} locked={locked} mode={mode} onPick={onPick} compact />
       </div>
@@ -140,7 +140,7 @@ function OptionCell({
 }) {
   if (!option) {
     return (
-      <div className={`flex items-center justify-center border-l border-ink/10 bg-ink/5 px-2 text-sm font-bold text-ink/30 ${compact ? "border-l-0" : ""}`}>
+      <div className={`flex items-center justify-center border-l border-ink/15 bg-ink/5 px-2 text-sm font-bold text-ink/30 ${compact ? "border-l-0" : ""}`}>
         --
       </div>
     );
@@ -155,7 +155,7 @@ function OptionCell({
 
   return (
     <button
-      className={`flex min-h-[70px] flex-col items-center justify-center border-l border-ink/10 px-2 text-center transition ${compact ? "min-h-0 border-l-0" : ""} ${cellClass(mine, disabled, mode)}`}
+      className={`flex min-h-[70px] flex-col items-center justify-center border-l border-ink/15 px-2 text-center transition ${compact ? "min-h-0 border-l-0" : ""} ${cellClass(mine, disabled, mode)}`}
       disabled={disabled}
       type="button"
       onClick={() => onPick?.(option)}
