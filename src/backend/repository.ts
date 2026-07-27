@@ -121,6 +121,66 @@ export class PickemRepository {
     }));
   }
 
+  async deleteLeagueMember(leagueId: string, userId: string): Promise<void> {
+    await client.send(new DeleteCommand({
+      TableName: this.tableName,
+      Key: { pk: `LEAGUE#${leagueId}`, sk: `MEMBER#${userId}` }
+    }));
+  }
+
+  async removeUserFromLeague(leagueId: string, userId: string): Promise<void> {
+    const items: Array<Record<string, unknown> & { pk?: string; sk?: string; entityType?: string }> = [];
+    let exclusiveStartKey: Record<string, unknown> | undefined;
+    do {
+      const result = await client.send(new ScanCommand({
+        TableName: this.tableName,
+        FilterExpression: "leagueId = :leagueId",
+        ExpressionAttributeValues: {
+          ":leagueId": leagueId
+        },
+        ExclusiveStartKey: exclusiveStartKey
+      }));
+      items.push(...((result.Items ?? []) as Array<Record<string, unknown> & { pk?: string; sk?: string; entityType?: string }>));
+      exclusiveStartKey = result.LastEvaluatedKey as Record<string, unknown> | undefined;
+    } while (exclusiveStartKey);
+
+    const removedProposalIds = new Set(
+      items
+        .filter((item) => item.entityType === "LineProposal" && item.proposerId === userId)
+        .map((item) => String(item.proposalId))
+    );
+    const keysToDelete = new Map<string, { pk: string; sk: string }>();
+
+    for (const item of items) {
+      if (!item.pk || !item.sk) {
+        continue;
+      }
+      const shouldDelete =
+        (item.entityType === "LeagueMember" && item.userId === userId) ||
+        (item.entityType === "PlayerPick" && item.userId === userId) ||
+        (item.entityType === "PickClaim" && item.userId === userId) ||
+        (item.entityType === "LineProposal" && item.proposerId === userId) ||
+        (item.entityType === "ProposalResponse" && (item.responderId === userId || removedProposalIds.has(String(item.proposalId)))) ||
+        (item.entityType === "Standing" && item.userId === userId);
+
+      if (shouldDelete) {
+        keysToDelete.set(`${item.pk}\u0000${item.sk}`, { pk: item.pk, sk: item.sk });
+      }
+    }
+
+    keysToDelete.set(`LEAGUE#${leagueId}\u0000MEMBER#${userId}`, {
+      pk: `LEAGUE#${leagueId}`,
+      sk: `MEMBER#${userId}`
+    });
+
+    for (const key of keysToDelete.values()) {
+      await client.send(new DeleteCommand({
+        TableName: this.tableName,
+        Key: key
+      }));
+    }
+  }
+
   async getWeek(leagueId: string, seasonId: string, weekId: string): Promise<Week | undefined> {
     const result = await client.send(new GetCommand({
       TableName: this.tableName,

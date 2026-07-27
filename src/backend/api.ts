@@ -1,7 +1,9 @@
 import {
   AdminAddUserToGroupCommand,
   AdminCreateUserCommand,
+  AdminDeleteUserCommand,
   AdminGetUserCommand,
+  AdminListGroupsForUserCommand,
   CognitoIdentityProviderClient
 } from "@aws-sdk/client-cognito-identity-provider";
 import type { APIGatewayProxyEventV2WithJWTAuthorizer, APIGatewayProxyStructuredResultV2 } from "aws-lambda";
@@ -10,6 +12,7 @@ import { PickemRepository } from "./repository";
 import { assertBeforeCutoff, defaultWeeklyCutoffUtc, defaultWeeklyScrapeUtc } from "./time";
 import { pickSummary, proposalSummary, responseResult, validateProposalQuota, validateQuota } from "./pickRules";
 import { applyWeekSettings } from "./weekSettingsRules";
+import { assertCanRemoveLeagueMember } from "./memberRemovalRules";
 import type { AppLeague, Game, GameWithOptions, LeagueMember, LineProposal, PickOption, PlayerPick, ProposalResponse, Week } from "./types";
 
 const cognito = new CognitoIdentityProviderClient({});
@@ -30,6 +33,10 @@ const memberSchema = z.object({
   userId: z.string().min(1),
   email: z.string().email().optional(),
   role: z.enum(["league_admin", "player"])
+});
+
+const removeMemberSchema = z.object({
+  userId: z.string().min(1)
 });
 
 const inviteSchema = z.object({
@@ -199,6 +206,37 @@ export async function handler(event: APIGatewayProxyEventV2WithJWTAuthorizer): P
       };
       await repository.putLeagueMember(member);
       return json({ member });
+    }
+
+    if (method === "DELETE" && memberMatch) {
+      const leagueId = decodeURIComponent(memberMatch[1]);
+      const body = removeMemberSchema.parse(parseBody(event));
+      const [actorMember, targetMember] = await Promise.all([
+        auth.isSuperAdmin ? Promise.resolve(undefined) : repository.getLeagueMember(leagueId, auth.userId),
+        repository.getLeagueMember(leagueId, body.userId)
+      ]);
+      if (!targetMember) {
+        return json({ message: "Member not found." }, 404);
+      }
+      const targetIsSuperAdmin = await isCognitoSuperAdmin(targetMember.email);
+      assertCanRemoveLeagueMember(
+        {
+          userId: auth.userId,
+          isSuperAdmin: auth.isSuperAdmin,
+          isLeagueAdmin: actorMember?.role === "league_admin"
+        },
+        {
+          userId: targetMember.userId,
+          role: targetMember.role,
+          isSuperAdmin: targetIsSuperAdmin
+        }
+      );
+      await repository.removeUserFromLeague(leagueId, targetMember.userId);
+      const remainingMemberships = await repository.listMembersForUser(targetMember.userId);
+      const cognitoDeleted = remainingMemberships.length === 0 && targetMember.email
+        ? await deleteCognitoUserIfPresent(targetMember.email)
+        : false;
+      return json({ ok: true, cognitoDeleted });
     }
 
     if (method === "GET" && path === "/week") {
@@ -557,6 +595,9 @@ export async function handler(event: APIGatewayProxyEventV2WithJWTAuthorizer): P
     if (message.includes("Unauthorized")) {
       return json({ message: "Unauthorized." }, 403);
     }
+    if (message.includes("cannot remove") || message.includes("Only a super admin") || message.includes("Super admins cannot be removed")) {
+      return json({ message }, 403);
+    }
     if (message.includes("already been claimed")) {
       return json({ message }, 409);
     }
@@ -872,6 +913,51 @@ async function invitePlayer(repository: PickemRepository, leagueId: string, emai
   };
   await repository.putLeagueMember(member);
   return member;
+}
+
+async function isCognitoSuperAdmin(email?: string): Promise<boolean> {
+  if (!email) {
+    return false;
+  }
+  const normalizedEmail = email.toLowerCase();
+  if (superAdminEmails.has(normalizedEmail)) {
+    return true;
+  }
+  const userPoolId = process.env.USER_POOL_ID;
+  if (!userPoolId) {
+    return false;
+  }
+  try {
+    const result = await cognito.send(new AdminListGroupsForUserCommand({
+      UserPoolId: userPoolId,
+      Username: email
+    }));
+    return (result.Groups ?? []).some((group) => group.GroupName === "super_admin");
+  } catch (error) {
+    if (error instanceof Error && error.name === "UserNotFoundException") {
+      return false;
+    }
+    throw error;
+  }
+}
+
+async function deleteCognitoUserIfPresent(email: string): Promise<boolean> {
+  const userPoolId = process.env.USER_POOL_ID;
+  if (!userPoolId) {
+    return false;
+  }
+  try {
+    await cognito.send(new AdminDeleteUserCommand({
+      UserPoolId: userPoolId,
+      Username: email
+    }));
+    return true;
+  } catch (error) {
+    if (error instanceof Error && error.name === "UserNotFoundException") {
+      return false;
+    }
+    throw error;
+  }
 }
 
 function parseBody(event: APIGatewayProxyEventV2WithJWTAuthorizer): unknown {

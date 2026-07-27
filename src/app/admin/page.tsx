@@ -17,6 +17,7 @@ import {
   Week,
   weekQuery
 } from "../../lib/api";
+import { getStoredSession, SessionState } from "../../lib/auth";
 import { getPreferredLeagueId, persistPreferredLeagueId } from "../../lib/leaguePreference";
 import { isValidQuotaInput, parseQuotaInput } from "../../lib/quotaInput";
 
@@ -40,7 +41,12 @@ export default function AdminPage() {
   const [savingSettings, setSavingSettings] = useState(false);
   const [showCreateLeague, setShowCreateLeague] = useState(false);
   const [creatingLeague, setCreatingLeague] = useState(false);
+  const [session, setSession] = useState<SessionState>();
   const [status, setStatus] = useState("Loading admin board...");
+
+  useEffect(() => {
+    setSession(getStoredSession());
+  }, []);
 
   useEffect(() => {
     apiGet<{ leagues: AppLeague[] }>("/leagues")
@@ -178,6 +184,22 @@ export default function AdminPage() {
       await load();
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Could not update member.");
+    }
+  }
+
+  async function removeMember(member: LeagueMember) {
+    const label = member.email ?? member.userId;
+    if (!window.confirm(`Remove ${label} from this league? This deletes their league picks, proposals, responses, and standings history.`)) {
+      return;
+    }
+    try {
+      const payload = await apiSend<{ cognitoDeleted?: boolean }>(`/admin/leagues/${encodeURIComponent(member.leagueId)}/members`, "DELETE", {
+        userId: member.userId
+      });
+      setStatus(payload.cognitoDeleted ? "Member removed and login reset for future invite." : "Member removed from league.");
+      await load();
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "Could not remove member.");
     }
   }
 
@@ -346,7 +368,7 @@ export default function AdminPage() {
             <h2 className="mb-3 text-xl font-semibold">Members</h2>
             <div className="space-y-2">
               {members.map((member) => (
-                <div key={member.userId} className="grid gap-2 rounded bg-ink/5 p-3 text-sm md:grid-cols-[1fr_150px] md:items-center">
+                <div key={member.userId} className="grid gap-2 rounded bg-ink/5 p-3 text-sm md:grid-cols-[1fr_150px_96px] md:items-center">
                   <div>
                     <div className="font-semibold">{member.email ?? member.userId}</div>
                     <div className="text-ink/55">{member.userId}</div>
@@ -355,6 +377,13 @@ export default function AdminPage() {
                     <option value="player">Player</option>
                     <option value="league_admin">League admin</option>
                   </select>
+                  {canShowRemoveMember(member, session) ? (
+                    <button className="rounded border border-red-200 bg-white px-3 py-2 font-semibold text-red-700 hover:bg-red-50" onClick={() => removeMember(member)}>
+                      Remove
+                    </button>
+                  ) : (
+                    <span className="hidden md:block" />
+                  )}
                 </div>
               ))}
               {!members.length ? <p className="text-sm text-ink/60">No members yet.</p> : null}
@@ -453,4 +482,19 @@ function formatMarketName(market: LineProposal["market"]): string {
     return "game total";
   }
   return "team total";
+}
+
+function canShowRemoveMember(member: LeagueMember, session?: SessionState): boolean {
+  if (!session) {
+    return false;
+  }
+  const isSelf = member.email?.toLowerCase() === session.email.toLowerCase();
+  if (isSelf) {
+    return false;
+  }
+  const isSuperAdmin = session.email.toLowerCase() === "grantoenges@gmail.com" || session.groups.includes("super_admin");
+  if (isSuperAdmin) {
+    return true;
+  }
+  return member.role === "player";
 }

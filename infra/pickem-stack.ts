@@ -1,4 +1,4 @@
-import { CfnOutput, CfnParameter, Duration, RemovalPolicy, SecretValue, Stack, StackProps } from "aws-cdk-lib";
+import { CfnOutput, Duration, RemovalPolicy, Stack, StackProps } from "aws-cdk-lib";
 import { CfnApp, CfnBranch } from "aws-cdk-lib/aws-amplify";
 import { AttributeType, BillingMode, Table } from "aws-cdk-lib/aws-dynamodb";
 import { Rule, Schedule } from "aws-cdk-lib/aws-events";
@@ -20,7 +20,7 @@ export class PickemStack extends Stack {
     const resourcePrefix = "pickem-bot-v1-run2";
     const firstAdminEmail = process.env.FIRST_ADMIN_EMAIL;
     const enableAmplify = process.env.ENABLE_AMPLIFY === "true";
-    const corsAllowedOrigins = (process.env.CORS_ALLOWED_ORIGINS ?? "https://master.d3j7zlwjnm04rp.amplifyapp.com,https://master.d3v9lgp3ju9tca.amplifyapp.com")
+    const corsAllowedOrigins = (process.env.CORS_ALLOWED_ORIGINS ?? "https://master.d16nzdj1k2k1wu.amplifyapp.com,https://master.d3j7zlwjnm04rp.amplifyapp.com,https://master.d3v9lgp3ju9tca.amplifyapp.com")
       .split(",")
       .map((origin) => origin.trim())
       .filter(Boolean);
@@ -130,7 +130,9 @@ export class PickemStack extends Stack {
       actions: [
         "cognito-idp:AdminCreateUser",
         "cognito-idp:AdminAddUserToGroup",
-        "cognito-idp:AdminGetUser"
+        "cognito-idp:AdminGetUser",
+        "cognito-idp:AdminListGroupsForUser",
+        "cognito-idp:AdminDeleteUser"
       ],
       resources: [userPool.userPoolArn]
     }));
@@ -240,16 +242,7 @@ export class PickemStack extends Stack {
     });
 
     if (enableAmplify) {
-      const githubPatParameter = new CfnParameter(this, "GithubPat", {
-        type: "String",
-        noEcho: true,
-        description: "GitHub PAT used by the new Amplify app to connect to granttoenges/pickem_bot."
-      });
-
-      const githubSecret = new Secret(this, "GithubPatSecret", {
-        secretName: `${resourcePrefix}-github-pat`,
-        secretStringValue: SecretValue.unsafePlainText(githubPatParameter.valueAsString)
-      });
+      const githubSecret = Secret.fromSecretNameV2(this, "GithubPatSecret", `${resourcePrefix}-github-pat`);
 
       const amplifyApp = new CfnApp(this, "AmplifyApp", {
         name: `${resourcePrefix}-amplify`,
