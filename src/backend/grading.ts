@@ -1,6 +1,14 @@
-import type { Game, GradedPick, OpeningLine, PlayerPick } from "./types";
+import type { Game, GradedPick, GradedProposal, LineProposal, OpeningLine, PlayerPick } from "./types";
 
 export function gradePick(game: Game, line: OpeningLine, pick: PlayerPick): GradedPick {
+  return gradeSelection(game, line, pick) as GradedPick;
+}
+
+export function gradeProposal(game: Game, line: OpeningLine, proposal: LineProposal): GradedProposal {
+  return gradeSelection(game, line, proposal) as GradedProposal;
+}
+
+function gradeSelection<T extends PlayerPick | LineProposal>(game: Game, line: OpeningLine, pick: T): T & { result: "win" | "loss" | "push" } {
   if (game.status !== "final" || game.homeScore === undefined || game.awayScore === undefined) {
     throw new Error("Game is not final.");
   }

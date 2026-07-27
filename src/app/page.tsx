@@ -3,10 +3,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { AppShell } from "../components/AppShell";
 import { GameOddsBoard } from "../components/GameOddsBoard";
-import { apiGet, apiSend, AppLeague, GameWithOptions, PickClaim, PickOption, PickSummary, PlayerPick, Week, weekQuery } from "../lib/api";
+import { apiGet, apiSend, AppLeague, GameWithOptions, LineProposal, PickClaim, PickOption, ProposalResponse, ProposalResponseStance, ProposalSummary, Week, weekQuery } from "../lib/api";
 import { getPreferredLeagueId, persistPreferredLeagueId } from "../lib/leaguePreference";
 
-type Tab = "available" | "mine";
+type Tab = "available" | "mine" | "league";
 
 export default function PlayerBoardPage() {
   const [leagues, setLeagues] = useState<AppLeague[]>([]);
@@ -14,10 +14,13 @@ export default function PlayerBoardPage() {
   const [week, setWeek] = useState<Week>();
   const [games, setGames] = useState<GameWithOptions[]>([]);
   const [claims, setClaims] = useState<PickClaim[]>([]);
-  const [userPicks, setUserPicks] = useState<PlayerPick[]>([]);
-  const [summary, setSummary] = useState<PickSummary>();
+  const [proposals, setProposals] = useState<LineProposal[]>([]);
+  const [userProposals, setUserProposals] = useState<LineProposal[]>([]);
+  const [proposalResponses, setProposalResponses] = useState<ProposalResponse[]>([]);
+  const [userProposalResponses, setUserProposalResponses] = useState<ProposalResponse[]>([]);
+  const [summary, setSummary] = useState<ProposalSummary>();
   const [tab, setTab] = useState<Tab>("available");
-  const [replaceOptionId, setReplaceOptionId] = useState<string>();
+  const [replaceProposalId, setReplaceProposalId] = useState<string>();
   const [status, setStatus] = useState("Loading leagues...");
 
   const locked = useMemo(() => week ? new Date() >= new Date(week.cutoffAt) : false, [week]);
@@ -47,70 +50,99 @@ export default function PlayerBoardPage() {
         week: Week;
         games: GameWithOptions[];
         claims: PickClaim[];
-        userPicks: PlayerPick[];
-        summary: PickSummary;
+        proposals: LineProposal[];
+        userProposals: LineProposal[];
+        proposalResponses: ProposalResponse[];
+        userProposalResponses: ProposalResponse[];
+        proposalSummary: ProposalSummary;
       }>(`/week?${weekQuery(leagueId)}`);
       setWeek(payload.week);
       setGames(payload.games);
       setClaims(payload.claims);
-      setUserPicks(payload.userPicks);
-      setSummary(payload.summary);
+      setProposals(payload.proposals);
+      setUserProposals(payload.userProposals);
+      setProposalResponses(payload.proposalResponses);
+      setUserProposalResponses(payload.userProposalResponses);
+      setSummary(payload.proposalSummary);
       setStatus("");
-      setReplaceOptionId(undefined);
+      setReplaceProposalId(undefined);
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Could not load weekly board.");
     }
   }
 
-  async function claimOption(option: PickOption) {
+  async function proposeOption(option: PickOption) {
     if (locked) {
       return;
     }
-    const currentPick = userPicks.find((pick) => pick.optionId === option.optionId);
-    if (currentPick) {
-      await releasePick(currentPick.optionId);
+    const currentProposal = userProposals.find((proposal) => proposal.optionId === option.optionId);
+    if (currentProposal) {
+      await releaseProposal(currentProposal.proposalId);
       return;
     }
-    const sameSportCount = userPicks.filter((pick) => pick.sportLeague === option.sportLeague && pick.optionId !== replaceOptionId).length;
+    const sameSportCount = userProposals.filter((proposal) => proposal.sportLeague === option.sportLeague && proposal.proposalId !== replaceProposalId).length;
     const required = option.sportLeague === "NFL" ? week?.nflPickCountRequired : week?.ncaafPickCountRequired;
-    if (!replaceOptionId && required !== undefined && sameSportCount >= required) {
-      setStatus(`Your ${option.sportLeague} card is full. Go to My Picks to change or release a pick first.`);
+    if (!replaceProposalId && required !== undefined && sameSportCount >= required) {
+      setStatus(`Your ${option.sportLeague} proposed lines are full. Go to My Picks to change or release a line first.`);
       return;
     }
     try {
-      await apiSend("/picks", "PUT", {
+      await apiSend("/proposals", "PUT", {
         leagueId: option.leagueId,
         seasonId: option.seasonId,
         weekId: option.weekId,
         optionId: option.optionId,
-        previousOptionId: replaceOptionId
+        previousProposalId: replaceProposalId
       });
-      setStatus(`Saved ${option.label}.`);
+      setStatus(`Proposed ${option.label}.`);
       await loadWeek();
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : "Could not claim pick.");
+      setStatus(error instanceof Error ? error.message : "Could not propose line.");
     }
   }
 
-  async function releasePick(optionId: string) {
+  async function releaseProposal(proposalId: string) {
     if (!week || locked) {
       return;
     }
     try {
-      await apiSend("/picks", "DELETE", {
+      await apiSend("/proposals", "DELETE", {
         leagueId: week.leagueId,
         seasonId: week.seasonId,
         weekId: week.weekId,
-        optionId
+        proposalId
       });
-      setStatus("Pick released.");
+      setStatus("Proposed line released.");
       await loadWeek();
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : "Could not release pick.");
+      setStatus(error instanceof Error ? error.message : "Could not release proposed line.");
     }
   }
 
-  const userOptionIds = new Set(userPicks.map((pick) => pick.optionId));
+  async function respondToProposal(proposal: LineProposal, stance: ProposalResponseStance) {
+    if (!week || locked) {
+      return;
+    }
+    try {
+      await apiSend("/proposal-responses", "PUT", {
+        leagueId: proposal.leagueId,
+        seasonId: proposal.seasonId,
+        weekId: proposal.weekId,
+        proposalId: proposal.proposalId,
+        stance
+      });
+      setStatus(`You are ${stance} ${proposal.proposerLabel ?? "that member"} on ${proposal.label}.`);
+      await loadWeek();
+      setTab("league");
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "Could not save response.");
+    }
+  }
+
+  const userOptionIds = new Set(userProposals.map((proposal) => proposal.optionId));
+  const gamesById = new Map(games.map((game) => [game.gameId, game]));
+  const userResponseByProposal = new Map(userProposalResponses.map((response) => [response.proposalId, response]));
+  const otherProposals = proposals.filter((proposal) => !userProposals.some((userProposal) => userProposal.proposalId === proposal.proposalId));
 
   return (
     <AppShell>
@@ -118,8 +150,8 @@ export default function PlayerBoardPage() {
         <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
           <div>
             <p className="text-sm font-semibold uppercase tracking-[0.2em] text-turf">Player Portal</p>
-            <h1 className="text-4xl font-semibold">Weekly Pick Claims</h1>
-            <p className="mt-2 text-ink/65">{week ? `${week.label} locks ${new Date(week.cutoffAt).toLocaleString()}` : "Claim exact spread and team total options."}</p>
+            <h1 className="text-4xl font-semibold">Weekly Proposed Lines</h1>
+            <p className="mt-2 text-ink/65">{week ? `${week.label} locks ${new Date(week.cutoffAt).toLocaleString()}` : "Propose lines and respond to league picks."}</p>
           </div>
           <div className="flex flex-wrap items-center gap-3">
             {leagues.length > 1 ? (
@@ -156,6 +188,7 @@ export default function PlayerBoardPage() {
         <div className="mb-5 flex gap-2">
           <button className={tabClass(tab === "available")} onClick={() => setTab("available")}>Available Games</button>
           <button className={tabClass(tab === "mine")} onClick={() => setTab("mine")}>My Picks</button>
+          <button className={tabClass(tab === "league")} onClick={() => setTab("league")}>League Picks</button>
         </div>
 
         {tab === "available" ? (
@@ -164,33 +197,68 @@ export default function PlayerBoardPage() {
               <GameOddsBoard
                 key={game.gameId}
                 game={game}
-                claims={claims}
+                claims={[]}
                 userOptionIds={userOptionIds}
                 locked={locked}
-                onPick={claimOption}
+                onPick={proposeOption}
               />
             ))}
             {!games.length && !status ? <div className="rounded border border-ink/10 bg-white p-6">No games are available for this league week yet.</div> : null}
           </div>
-        ) : (
+        ) : tab === "mine" ? (
           <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
-            {userPicks.map((pick) => (
-              <article key={pick.optionId} className={`rounded border bg-white p-4 ${replaceOptionId === pick.optionId ? "border-gold ring-2 ring-gold/30" : "border-ink/10"}`}>
-                <div className="text-xs font-bold text-turf">{pick.sportLeague}</div>
-                <h2 className="mt-1 font-semibold">{pick.team}</h2>
-                <p className="text-sm text-ink/60">{pick.market === "spread" ? "Spread" : "Team total"} {pick.side} {pick.lineValue > 0 && pick.market === "spread" ? `+${pick.lineValue}` : pick.lineValue}</p>
-                <p className="mt-2 text-sm font-medium">{pick.result}</p>
+            {userProposals.map((proposal) => (
+              <article key={proposal.proposalId} className={`rounded border bg-white p-4 ${replaceProposalId === proposal.proposalId ? "border-gold ring-2 ring-gold/30" : "border-ink/10"}`}>
+                <div className="text-xs font-bold text-turf">{proposal.sportLeague}</div>
+                <h2 className="mt-1 font-semibold">{proposal.team}</h2>
+                <p className="text-sm text-ink/60">{formatMarket(proposal)} · {gameLabel(gamesById.get(proposal.gameId))}</p>
+                <p className="mt-2 text-sm font-medium">{proposal.result}</p>
                 <div className="mt-4 flex gap-2">
-                  <button className="rounded bg-ink px-3 py-2 text-sm font-semibold text-white disabled:bg-ink/35" disabled={locked} onClick={() => { setReplaceOptionId(pick.optionId); setTab("available"); }}>
+                  <button className="rounded bg-ink px-3 py-2 text-sm font-semibold text-white disabled:bg-ink/35" disabled={locked} onClick={() => { setReplaceProposalId(proposal.proposalId); setTab("available"); }}>
                     Change
                   </button>
-                  <button className="rounded border border-ink/20 px-3 py-2 text-sm font-semibold disabled:text-ink/35" disabled={locked} onClick={() => releasePick(pick.optionId)}>
+                  <button className="rounded border border-ink/20 px-3 py-2 text-sm font-semibold disabled:text-ink/35" disabled={locked} onClick={() => releaseProposal(proposal.proposalId)}>
                     Release
                   </button>
                 </div>
               </article>
             ))}
-            {!userPicks.length ? <div className="rounded border border-ink/10 bg-white p-6 text-ink/60">You have not claimed any picks yet.</div> : null}
+            {!userProposals.length ? <div className="rounded border border-ink/10 bg-white p-6 text-ink/60">You have not proposed any lines yet.</div> : null}
+          </div>
+        ) : (
+          <div className="grid gap-3 md:grid-cols-2">
+            {otherProposals.map((proposal) => {
+              const response = userResponseByProposal.get(proposal.proposalId);
+              return (
+                <article key={proposal.proposalId} className="rounded border border-ink/15 bg-white p-4 shadow-sm ring-1 ring-ink/5">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <div className="text-xs font-bold uppercase tracking-wide text-turf">{proposal.sportLeague} · proposed by {proposal.proposerLabel ?? "member"}</div>
+                      <h2 className="mt-1 text-lg font-semibold">{proposal.label}</h2>
+                      <p className="text-sm text-ink/60">{formatMarket(proposal)} · {gameLabel(gamesById.get(proposal.gameId))}</p>
+                    </div>
+                    {response ? <span className="rounded bg-gold/25 px-3 py-1 text-xs font-bold uppercase text-ink">{response.stance}</span> : null}
+                  </div>
+                  <div className="mt-4 flex gap-2">
+                    <button
+                      className={`rounded px-4 py-2 text-sm font-semibold disabled:bg-ink/20 disabled:text-ink/40 ${response?.stance === "with" ? "bg-gold text-ink" : "bg-turf text-white"}`}
+                      disabled={locked}
+                      onClick={() => respondToProposal(proposal, "with")}
+                    >
+                      With
+                    </button>
+                    <button
+                      className={`rounded px-4 py-2 text-sm font-semibold disabled:bg-ink/20 disabled:text-ink/40 ${response?.stance === "against" ? "bg-gold text-ink" : "border border-ink/20 bg-white text-ink"}`}
+                      disabled={locked}
+                      onClick={() => respondToProposal(proposal, "against")}
+                    >
+                      Against
+                    </button>
+                  </div>
+                </article>
+              );
+            })}
+            {!otherProposals.length ? <div className="rounded border border-ink/10 bg-white p-6 text-ink/60">No league members have proposed lines yet.</div> : null}
           </div>
         )}
       </section>
@@ -202,7 +270,7 @@ function Quota({ label, submitted, required }: { label: string; submitted: numbe
   const complete = submitted === required;
   return (
     <div className={`rounded border p-4 ${complete ? "border-turf bg-turf/10" : "border-ink/10 bg-white"}`}>
-      <div className="text-sm font-semibold text-ink/60">{label} Picks</div>
+      <div className="text-sm font-semibold text-ink/60">{label} Lines</div>
       <div className="mt-1 text-xl font-semibold">{submitted} / {required}</div>
     </div>
   );
@@ -210,4 +278,15 @@ function Quota({ label, submitted, required }: { label: string; submitted: numbe
 
 function tabClass(active: boolean): string {
   return `rounded px-4 py-2 text-sm font-semibold ${active ? "bg-ink text-white" : "border border-ink/15 bg-white text-ink"}`;
+}
+
+function formatMarket(proposal: LineProposal): string {
+  if (proposal.market === "spread") {
+    return `Spread ${proposal.lineValue > 0 ? `+${proposal.lineValue}` : proposal.lineValue}`;
+  }
+  return `Team total ${proposal.side} ${proposal.lineValue}`;
+}
+
+function gameLabel(game?: GameWithOptions): string {
+  return game ? `${game.awayTeam} at ${game.homeTeam}` : "Game";
 }

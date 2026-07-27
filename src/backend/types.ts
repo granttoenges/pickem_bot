@@ -4,6 +4,7 @@ export type LeagueMemberRole = "league_admin" | "player";
 export type Market = "spread" | "team_total" | "moneyline";
 export type PickSide = "home" | "away" | "over" | "under";
 export type PickResult = "win" | "loss" | "push" | "pending";
+export type ProposalResponseStance = "with" | "against";
 
 export interface AppLeague {
   leagueId: string;
@@ -109,6 +110,36 @@ export interface PlayerPick extends PickClaim {
   result: PickResult;
 }
 
+export interface LineProposal {
+  leagueId: string;
+  seasonId: string;
+  weekId: string;
+  proposalId: string;
+  optionId: string;
+  gameId: string;
+  proposerId: string;
+  proposerLabel?: string;
+  sportLeague: SportLeague;
+  team: string;
+  market: Market;
+  side: PickSide;
+  lineValue: number;
+  label: string;
+  submittedAt: string;
+  result: PickResult;
+}
+
+export interface ProposalResponse {
+  leagueId: string;
+  seasonId: string;
+  weekId: string;
+  proposalId: string;
+  responderId: string;
+  stance: ProposalResponseStance;
+  submittedAt: string;
+  result: PickResult;
+}
+
 export interface GameWithOptions extends Game {
   lines: OpeningLine[];
   options: PickOption[];
@@ -124,6 +155,10 @@ export interface Standing {
 }
 
 export interface GradedPick extends PlayerPick {
+  result: Exclude<PickResult, "pending">;
+}
+
+export interface GradedProposal extends LineProposal {
   result: Exclude<PickResult, "pending">;
 }
 

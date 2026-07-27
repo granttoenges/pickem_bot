@@ -8,9 +8,9 @@ import type { APIGatewayProxyEventV2WithJWTAuthorizer, APIGatewayProxyStructured
 import { z } from "zod";
 import { PickemRepository } from "./repository";
 import { assertBeforeCutoff, defaultWeeklyCutoffUtc, defaultWeeklyScrapeUtc } from "./time";
-import { pickSummary, validateQuota } from "./pickRules";
+import { pickSummary, proposalSummary, responseResult, validateProposalQuota, validateQuota } from "./pickRules";
 import { applyWeekSettings } from "./weekSettingsRules";
-import type { AppLeague, Game, GameWithOptions, LeagueMember, PickOption, PlayerPick, Week } from "./types";
+import type { AppLeague, Game, GameWithOptions, LeagueMember, LineProposal, PickOption, PlayerPick, ProposalResponse, Week } from "./types";
 
 const cognito = new CognitoIdentityProviderClient({});
 
@@ -72,6 +72,36 @@ const releasePickSchema = z.object({
   seasonId: z.string().min(1),
   weekId: z.string().min(1),
   optionId: z.string().min(1)
+});
+
+const proposalSchema = z.object({
+  leagueId: z.string().min(1),
+  seasonId: z.string().min(1),
+  weekId: z.string().min(1),
+  optionId: z.string().min(1),
+  previousProposalId: z.string().optional()
+});
+
+const releaseProposalSchema = z.object({
+  leagueId: z.string().min(1),
+  seasonId: z.string().min(1),
+  weekId: z.string().min(1),
+  proposalId: z.string().min(1)
+});
+
+const proposalResponseSchema = z.object({
+  leagueId: z.string().min(1),
+  seasonId: z.string().min(1),
+  weekId: z.string().min(1),
+  proposalId: z.string().min(1),
+  stance: z.enum(["with", "against"])
+});
+
+const deleteProposalResponseSchema = z.object({
+  leagueId: z.string().min(1),
+  seasonId: z.string().min(1),
+  weekId: z.string().min(1),
+  proposalId: z.string().min(1)
 });
 
 export async function handler(event: APIGatewayProxyEventV2WithJWTAuthorizer): Promise<APIGatewayProxyStructuredResultV2> {
@@ -146,19 +176,30 @@ export async function handler(event: APIGatewayProxyEventV2WithJWTAuthorizer): P
       const seasonId = requireQuery(event, "seasonId");
       const weekId = requireQuery(event, "weekId");
       await requireLeagueAccess(repository, auth, leagueId);
-      const [week, games, options, claims, userPicks] = await Promise.all([
+      const [week, games, options, claims, userPicks, persistedProposals, responses, members] = await Promise.all([
         repository.getWeek(leagueId, seasonId, weekId),
         repository.listWeekGames(leagueId, seasonId, weekId),
         repository.listPickOptions(leagueId, seasonId, weekId),
         repository.listClaims(leagueId, seasonId, weekId),
-        repository.listUserPicks(leagueId, seasonId, weekId, auth.userId)
+        repository.listUserPicks(leagueId, seasonId, weekId, auth.userId),
+        repository.listProposals(leagueId, seasonId, weekId),
+        repository.listProposalResponses(leagueId, seasonId, weekId),
+        repository.listLeagueMembers(leagueId)
       ]);
+      const selectedWeek = week ?? defaultWeek(leagueId, seasonId, weekId);
+      const proposals = hydrateProposalLabels(mergeLegacyPickProposals(persistedProposals, await repository.listPicks(leagueId, seasonId, weekId)), members);
+      const userProposals = proposals.filter((proposal) => proposal.proposerId === auth.userId);
       return json({
-        week: week ?? defaultWeek(leagueId, seasonId, weekId),
+        week: selectedWeek,
         games: await withOptions(repository, games, options),
         claims,
         userPicks,
-        summary: pickSummary(userPicks, week ?? defaultWeek(leagueId, seasonId, weekId))
+        summary: pickSummary(userPicks, selectedWeek),
+        proposals,
+        userProposals,
+        proposalResponses: responses,
+        userProposalResponses: responses.filter((response) => response.responderId === auth.userId),
+        proposalSummary: proposalSummary(userProposals, selectedWeek)
       });
     }
 
@@ -167,20 +208,25 @@ export async function handler(event: APIGatewayProxyEventV2WithJWTAuthorizer): P
       const seasonId = requireQuery(event, "seasonId");
       const weekId = requireQuery(event, "weekId");
       await requireLeagueAdmin(repository, auth, leagueId);
-      const [week, games, options, claims, picks, scrapeRuns, members] = await Promise.all([
+      const [week, games, options, claims, picks, persistedProposals, responses, scrapeRuns, members] = await Promise.all([
         repository.getWeek(leagueId, seasonId, weekId),
         repository.listWeekGames(leagueId, seasonId, weekId),
         repository.listPickOptions(leagueId, seasonId, weekId),
         repository.listClaims(leagueId, seasonId, weekId),
         repository.listPicks(leagueId, seasonId, weekId),
+        repository.listProposals(leagueId, seasonId, weekId),
+        repository.listProposalResponses(leagueId, seasonId, weekId),
         repository.listScrapeRuns(seasonId, weekId),
         repository.listLeagueMembers(leagueId)
       ]);
+      const proposals = hydrateProposalLabels(mergeLegacyPickProposals(persistedProposals, picks), members);
       return json({
         week: week ?? defaultWeek(leagueId, seasonId, weekId),
         games: await withOptions(repository, games, options),
         claims,
         picks,
+        proposals,
+        proposalResponses: responses,
         scrapeRuns,
         members
       });
@@ -252,6 +298,125 @@ export async function handler(event: APIGatewayProxyEventV2WithJWTAuthorizer): P
       return json({ pick });
     }
 
+    if (method === "PUT" && path === "/proposals") {
+      const body = proposalSchema.parse(parseBody(event));
+      await requireLeagueAccess(repository, auth, body.leagueId);
+      const [week, options, persistedCurrentProposals, currentPicks] = await Promise.all([
+        repository.getWeek(body.leagueId, body.seasonId, body.weekId),
+        listAvailablePickOptions(repository, body.leagueId, body.seasonId, body.weekId),
+        repository.listUserProposals(body.leagueId, body.seasonId, body.weekId, auth.userId),
+        repository.listUserPicks(body.leagueId, body.seasonId, body.weekId, auth.userId)
+      ]);
+      if (!week) {
+        return json({ message: "Week not found." }, 404);
+      }
+      assertBeforeCutoff(new Date(), week.cutoffAt);
+      const option = options.find((item) => item.optionId === body.optionId);
+      if (!option) {
+        return json({ message: "Pick option not found." }, 404);
+      }
+      const previousProposalId = body.previousProposalId;
+      const currentProposals = mergeLegacyPickProposals(persistedCurrentProposals, currentPicks);
+      validateProposalQuota(week, option.sportLeague, currentProposals, previousProposalId);
+      const now = new Date().toISOString();
+      const proposal: LineProposal = {
+        leagueId: body.leagueId,
+        seasonId: body.seasonId,
+        weekId: body.weekId,
+        proposalId: proposalIdFor(auth.userId, body.optionId),
+        optionId: body.optionId,
+        proposerId: auth.userId,
+        proposerLabel: auth.email ?? shortUserId(auth.userId),
+        gameId: option.gameId,
+        sportLeague: option.sportLeague,
+        team: option.team,
+        market: option.market,
+        side: option.side,
+        lineValue: option.lineValue,
+        label: option.label,
+        submittedAt: now,
+        result: "pending"
+      };
+      await repository.putProposal(proposal, previousProposalId);
+      if (previousProposalId && previousProposalId !== proposal.proposalId) {
+        const responses = await repository.listProposalResponses(body.leagueId, body.seasonId, body.weekId);
+        await Promise.all(responses
+          .filter((response) => response.proposalId === previousProposalId)
+          .map((response) => repository.deleteProposalResponse(body.leagueId, body.seasonId, body.weekId, previousProposalId, response.responderId)));
+        const legacyPrevious = currentPicks.find((pick) => proposalIdFor(pick.userId, pick.optionId) === previousProposalId);
+        if (legacyPrevious) {
+          await releaseLegacyPick(repository, body.leagueId, body.seasonId, body.weekId, auth.userId, legacyPrevious.optionId);
+        }
+      }
+      return json({ proposal });
+    }
+
+    if (method === "DELETE" && path === "/proposals") {
+      const body = releaseProposalSchema.parse(parseBody(event));
+      await requireLeagueAccess(repository, auth, body.leagueId);
+      const week = await repository.getWeek(body.leagueId, body.seasonId, body.weekId);
+      if (!week) {
+        return json({ message: "Week not found." }, 404);
+      }
+      assertBeforeCutoff(new Date(), week.cutoffAt);
+      await repository.deleteProposal(body.leagueId, body.seasonId, body.weekId, auth.userId, body.proposalId);
+      const legacyPick = (await repository.listUserPicks(body.leagueId, body.seasonId, body.weekId, auth.userId))
+        .find((pick) => proposalIdFor(pick.userId, pick.optionId) === body.proposalId);
+      if (legacyPick) {
+        await releaseLegacyPick(repository, body.leagueId, body.seasonId, body.weekId, auth.userId, legacyPick.optionId);
+      }
+      const responses = await repository.listProposalResponses(body.leagueId, body.seasonId, body.weekId);
+      await Promise.all(responses
+        .filter((response) => response.proposalId === body.proposalId)
+        .map((response) => repository.deleteProposalResponse(body.leagueId, body.seasonId, body.weekId, body.proposalId, response.responderId)));
+      return json({ ok: true });
+    }
+
+    if (method === "PUT" && path === "/proposal-responses") {
+      const body = proposalResponseSchema.parse(parseBody(event));
+      await requireLeagueAccess(repository, auth, body.leagueId);
+      const [week, persistedProposals, picks] = await Promise.all([
+        repository.getWeek(body.leagueId, body.seasonId, body.weekId),
+        repository.listProposals(body.leagueId, body.seasonId, body.weekId),
+        repository.listPicks(body.leagueId, body.seasonId, body.weekId)
+      ]);
+      if (!week) {
+        return json({ message: "Week not found." }, 404);
+      }
+      assertBeforeCutoff(new Date(), week.cutoffAt);
+      const proposal = mergeLegacyPickProposals(persistedProposals, picks).find((item) => item.proposalId === body.proposalId);
+      if (!proposal) {
+        return json({ message: "Proposal not found." }, 404);
+      }
+      if (proposal.proposerId === auth.userId) {
+        return json({ message: "You cannot respond to your own proposed line." }, 409);
+      }
+      const response: ProposalResponse = {
+        leagueId: body.leagueId,
+        seasonId: body.seasonId,
+        weekId: body.weekId,
+        proposalId: body.proposalId,
+        responderId: auth.userId,
+        stance: body.stance,
+        submittedAt: new Date().toISOString(),
+        result: responseResult(proposal.result, body.stance)
+      };
+      await repository.putProposalResponse(response);
+      return json({ response });
+    }
+
+    if (method === "DELETE" && path === "/proposal-responses") {
+      const body = deleteProposalResponseSchema.parse(parseBody(event));
+      await requireLeagueAccess(repository, auth, body.leagueId);
+      const week = await repository.getWeek(body.leagueId, body.seasonId, body.weekId);
+      if (!week) {
+        return json({ message: "Week not found." }, 404);
+      }
+      assertBeforeCutoff(new Date(), week.cutoffAt);
+      await repository.deleteProposalResponse(body.leagueId, body.seasonId, body.weekId, body.proposalId, auth.userId);
+      return json({ ok: true });
+    }
+
     if (method === "DELETE" && path === "/picks") {
       const body = releasePickSchema.parse(parseBody(event));
       await requireLeagueAccess(repository, auth, body.leagueId);
@@ -288,6 +453,9 @@ export async function handler(event: APIGatewayProxyEventV2WithJWTAuthorizer): P
       return json({ message: "Unauthorized." }, 403);
     }
     if (message.includes("already been claimed")) {
+      return json({ message }, 409);
+    }
+    if (message.includes("proposal limit")) {
       return json({ message }, 409);
     }
     console.error("Unhandled API error", error);
@@ -421,6 +589,65 @@ function defaultWeek(leagueId: string, seasonId: string, weekId: string): Week {
     nflPickCountRequired: 3,
     ncaafPickCountRequired: 3
   };
+}
+
+function mergeLegacyPickProposals(proposals: LineProposal[], picks: PlayerPick[]): LineProposal[] {
+  const merged = new Map<string, LineProposal>();
+  for (const proposal of proposals) {
+    merged.set(proposal.proposalId, proposal);
+  }
+  for (const pick of picks) {
+    const proposalId = proposalIdFor(pick.userId, pick.optionId);
+    if (merged.has(proposalId)) {
+      continue;
+    }
+    merged.set(proposalId, {
+      leagueId: pick.leagueId,
+      seasonId: pick.seasonId,
+      weekId: pick.weekId,
+      proposalId,
+      optionId: pick.optionId,
+      gameId: pick.gameId,
+      proposerId: pick.userId,
+      proposerLabel: shortUserId(pick.userId),
+      sportLeague: pick.sportLeague,
+      team: pick.team,
+      market: pick.market,
+      side: pick.side,
+      lineValue: pick.lineValue,
+      label: `${pick.team} ${pick.market === "spread" ? formatSigned(pick.lineValue) : `${pick.side} ${pick.lineValue}`}`,
+      submittedAt: pick.submittedAt,
+      result: pick.result
+    });
+  }
+  return [...merged.values()].sort((a, b) => b.submittedAt.localeCompare(a.submittedAt));
+}
+
+function hydrateProposalLabels(proposals: LineProposal[], members: LeagueMember[]): LineProposal[] {
+  const labels = new Map(members.map((member) => [member.userId, member.email ?? shortUserId(member.userId)]));
+  return proposals.map((proposal) => ({
+    ...proposal,
+    proposerLabel: labels.get(proposal.proposerId) ?? proposal.proposerLabel ?? shortUserId(proposal.proposerId)
+  }));
+}
+
+function proposalIdFor(userId: string, optionId: string): string {
+  return `${userId}::${optionId}`;
+}
+
+function shortUserId(userId: string): string {
+  return userId.length <= 12 ? userId : `${userId.slice(0, 8)}...`;
+}
+
+async function releaseLegacyPick(repository: PickemRepository, leagueId: string, seasonId: string, weekId: string, userId: string, optionId: string): Promise<void> {
+  try {
+    await repository.releasePick(leagueId, seasonId, weekId, userId, optionId);
+  } catch (error) {
+    if (error instanceof Error && error.name === "TransactionCanceledException") {
+      return;
+    }
+    throw error;
+  }
 }
 
 async function leaguesForUser(repository: PickemRepository, auth: AuthState): Promise<AppLeague[]> {

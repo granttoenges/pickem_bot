@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { gradePick } from "../src/backend/grading";
-import type { Game, OpeningLine, PlayerPick } from "../src/backend/types";
+import { gradePick, gradeProposal } from "../src/backend/grading";
+import type { Game, LineProposal, OpeningLine, PlayerPick } from "../src/backend/types";
 
 const game: Game = {
   leagueId: "friends",
@@ -42,6 +42,25 @@ const basePick: PlayerPick = {
   result: "pending"
 };
 
+const baseProposal: LineProposal = {
+  leagueId: "friends",
+  seasonId: "2026",
+  weekId: "1",
+  proposalId: "user-1::game-1-home-spread",
+  optionId: "game-1-home-spread",
+  gameId: "game-1",
+  proposerId: "user-1",
+  proposerLabel: "user@example.com",
+  sportLeague: "NFL",
+  market: "spread",
+  team: "Chicago",
+  side: "home",
+  lineValue: 2.5,
+  label: "Chicago +2.5",
+  submittedAt: "2026-09-10T15:00:00.000Z",
+  result: "pending"
+};
+
 describe("gradePick", () => {
   it("grades spread picks against the stored opening line", () => {
     expect(gradePick(game, spreadLine, basePick).result).toBe("win");
@@ -53,5 +72,9 @@ describe("gradePick", () => {
       { ...spreadLine, market: "team_total", homeTeamTotal: 23.5 },
       { ...basePick, optionId: "game-1-home-total-over", market: "team_total", side: "over", lineValue: 23.5 }
     ).result).toBe("win");
+  });
+
+  it("grades proposed lines against the stored opening line", () => {
+    expect(gradeProposal(game, spreadLine, baseProposal).result).toBe("win");
   });
 });

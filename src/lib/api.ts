@@ -6,6 +6,8 @@ import { getStoredSession } from "./auth";
 export type SportLeague = "NFL" | "NCAAF";
 export type Market = "spread" | "team_total" | "moneyline";
 export type PickSide = "home" | "away" | "over" | "under";
+export type PickResult = "win" | "loss" | "push" | "pending";
+export type ProposalResponseStance = "with" | "against";
 
 export interface AppLeague {
   leagueId: string;
@@ -105,6 +107,36 @@ export interface PlayerPick {
   result: string;
 }
 
+export interface LineProposal {
+  leagueId: string;
+  seasonId: string;
+  weekId: string;
+  proposalId: string;
+  optionId: string;
+  gameId: string;
+  proposerId: string;
+  proposerLabel?: string;
+  sportLeague: SportLeague;
+  team: string;
+  market: Market;
+  side: PickSide;
+  lineValue: number;
+  label: string;
+  submittedAt: string;
+  result: PickResult;
+}
+
+export interface ProposalResponse {
+  leagueId: string;
+  seasonId: string;
+  weekId: string;
+  proposalId: string;
+  responderId: string;
+  stance: ProposalResponseStance;
+  submittedAt: string;
+  result: PickResult;
+}
+
 export interface LeagueMember {
   leagueId: string;
   userId: string;
@@ -134,6 +166,8 @@ export interface PickSummary {
   NCAAF: { submitted: number; required: number; complete: boolean };
   complete: boolean;
 }
+
+export type ProposalSummary = PickSummary;
 
 export async function apiGet<T>(path: string): Promise<T> {
   return apiRequest<T>(path, { method: "GET" });

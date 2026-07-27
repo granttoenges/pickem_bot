@@ -1,4 +1,4 @@
-import type { PlayerPick, SportLeague, Week } from "./types";
+import type { LineProposal, PickResult, PlayerPick, ProposalResponseStance, SportLeague, Week } from "./types";
 
 export function pickSummary(picks: PlayerPick[], week: Week) {
   const nfl = picks.filter((pick) => pick.sportLeague === "NFL").length;
@@ -19,4 +19,29 @@ export function validateQuota(week: Week, sportLeague: SportLeague, currentPicks
   if (existingCount >= required) {
     throw new Error(`${sportLeague} pick quota is already full.`);
   }
+}
+
+export function proposalSummary(proposals: LineProposal[], week: Week) {
+  const nfl = proposals.filter((proposal) => proposal.sportLeague === "NFL").length;
+  const ncaaf = proposals.filter((proposal) => proposal.sportLeague === "NCAAF").length;
+  return {
+    NFL: { submitted: nfl, required: week.nflPickCountRequired, complete: nfl === week.nflPickCountRequired },
+    NCAAF: { submitted: ncaaf, required: week.ncaafPickCountRequired, complete: ncaaf === week.ncaafPickCountRequired },
+    complete: nfl === week.nflPickCountRequired && ncaaf === week.ncaafPickCountRequired
+  };
+}
+
+export function validateProposalQuota(week: Week, sportLeague: SportLeague, currentProposals: LineProposal[], previousProposalId: string | undefined): void {
+  const existingCount = currentProposals.filter((proposal) => proposal.sportLeague === sportLeague && proposal.proposalId !== previousProposalId).length;
+  const required = sportLeague === "NFL" ? week.nflPickCountRequired : week.ncaafPickCountRequired;
+  if (existingCount >= required) {
+    throw new Error(`${sportLeague} proposal limit is already full.`);
+  }
+}
+
+export function responseResult(proposalResult: PickResult, stance: ProposalResponseStance): PickResult {
+  if (proposalResult === "pending" || proposalResult === "push" || stance === "with") {
+    return proposalResult;
+  }
+  return proposalResult === "win" ? "loss" : "win";
 }

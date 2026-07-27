@@ -12,10 +12,12 @@ import type {
   AppLeague,
   Game,
   LeagueMember,
+  LineProposal,
   OpeningLine,
   PickClaim,
   PickOption,
   PlayerPick,
+  ProposalResponse,
   ScrapeRun,
   Standing,
   Week
@@ -294,6 +296,93 @@ export class PickemRepository {
     return (result.Items ?? []) as PlayerPick[];
   }
 
+  async listProposals(leagueId: string, seasonId: string, weekId: string): Promise<LineProposal[]> {
+    const result = await client.send(new QueryCommand({
+      TableName: this.tableName,
+      KeyConditionExpression: "pk = :pk",
+      ExpressionAttributeValues: {
+        ":pk": proposalsPk(leagueId, seasonId, weekId)
+      }
+    }));
+    return (result.Items ?? []) as LineProposal[];
+  }
+
+  async listUserProposals(leagueId: string, seasonId: string, weekId: string, proposerId: string): Promise<LineProposal[]> {
+    const result = await client.send(new QueryCommand({
+      TableName: this.tableName,
+      KeyConditionExpression: "pk = :pk and begins_with(sk, :prefix)",
+      ExpressionAttributeValues: {
+        ":pk": proposalsPk(leagueId, seasonId, weekId),
+        ":prefix": `PROPOSER#${proposerId}#`
+      }
+    }));
+    return (result.Items ?? []) as LineProposal[];
+  }
+
+  async putProposal(proposal: LineProposal, previousProposalId?: string): Promise<void> {
+    const transactItems = [];
+
+    if (previousProposalId && previousProposalId !== proposal.proposalId) {
+      transactItems.push({
+        Delete: {
+          TableName: this.tableName,
+          Key: { pk: proposalsPk(proposal.leagueId, proposal.seasonId, proposal.weekId), sk: proposalSk(proposal.proposerId, previousProposalId) }
+        }
+      });
+    }
+
+    transactItems.push({
+      Put: {
+        TableName: this.tableName,
+        Item: {
+          pk: proposalsPk(proposal.leagueId, proposal.seasonId, proposal.weekId),
+          sk: proposalSk(proposal.proposerId, proposal.proposalId),
+          entityType: "LineProposal",
+          ...proposal
+        }
+      }
+    });
+
+    await client.send(new TransactWriteCommand({ TransactItems: transactItems }));
+  }
+
+  async deleteProposal(leagueId: string, seasonId: string, weekId: string, proposerId: string, proposalId: string): Promise<void> {
+    await client.send(new DeleteCommand({
+      TableName: this.tableName,
+      Key: { pk: proposalsPk(leagueId, seasonId, weekId), sk: proposalSk(proposerId, proposalId) }
+    }));
+  }
+
+  async listProposalResponses(leagueId: string, seasonId: string, weekId: string): Promise<ProposalResponse[]> {
+    const result = await client.send(new QueryCommand({
+      TableName: this.tableName,
+      KeyConditionExpression: "pk = :pk",
+      ExpressionAttributeValues: {
+        ":pk": proposalResponsesPk(leagueId, seasonId, weekId)
+      }
+    }));
+    return (result.Items ?? []) as ProposalResponse[];
+  }
+
+  async putProposalResponse(response: ProposalResponse): Promise<void> {
+    await client.send(new PutCommand({
+      TableName: this.tableName,
+      Item: {
+        pk: proposalResponsesPk(response.leagueId, response.seasonId, response.weekId),
+        sk: responseSk(response.proposalId, response.responderId),
+        entityType: "ProposalResponse",
+        ...response
+      }
+    }));
+  }
+
+  async deleteProposalResponse(leagueId: string, seasonId: string, weekId: string, proposalId: string, responderId: string): Promise<void> {
+    await client.send(new DeleteCommand({
+      TableName: this.tableName,
+      Key: { pk: proposalResponsesPk(leagueId, seasonId, weekId), sk: responseSk(proposalId, responderId) }
+    }));
+  }
+
   async claimPick(pick: PlayerPick, previousOptionId?: string): Promise<void> {
     const claimedAt = pick.claimedAt;
     const transactItems = [];
@@ -448,4 +537,20 @@ function claimsPk(leagueId: string, seasonId: string, weekId: string): string {
 
 function picksPk(leagueId: string, seasonId: string, weekId: string): string {
   return `PICK#${leagueId}#${seasonId}#${weekId}`;
+}
+
+function proposalsPk(leagueId: string, seasonId: string, weekId: string): string {
+  return `PROPOSAL#${leagueId}#${seasonId}#${weekId}`;
+}
+
+function proposalResponsesPk(leagueId: string, seasonId: string, weekId: string): string {
+  return `PROPOSAL_RESPONSE#${leagueId}#${seasonId}#${weekId}`;
+}
+
+function proposalSk(proposerId: string, proposalId: string): string {
+  return `PROPOSER#${proposerId}#PROPOSAL#${proposalId}`;
+}
+
+function responseSk(proposalId: string, responderId: string): string {
+  return `PROPOSAL#${proposalId}#RESPONDER#${responderId}`;
 }

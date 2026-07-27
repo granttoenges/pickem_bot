@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { pickSummary, validateQuota } from "../src/backend/pickRules";
-import type { PlayerPick, Week } from "../src/backend/types";
+import { proposalSummary, responseResult, validateProposalQuota, pickSummary, validateQuota } from "../src/backend/pickRules";
+import type { LineProposal, PlayerPick, Week } from "../src/backend/types";
 
 const week: Week = {
   leagueId: "friends",
@@ -32,6 +32,27 @@ function pick(optionId: string, sportLeague: "NFL" | "NCAAF"): PlayerPick {
   };
 }
 
+function proposal(proposalId: string, sportLeague: "NFL" | "NCAAF"): LineProposal {
+  return {
+    leagueId: "friends",
+    seasonId: "2026",
+    weekId: "1",
+    proposalId,
+    optionId: proposalId,
+    gameId: `game-${proposalId}`,
+    proposerId: "user-1",
+    proposerLabel: "user@example.com",
+    sportLeague,
+    team: "Chicago",
+    market: "spread",
+    side: "home",
+    lineValue: 1.5,
+    label: "Chicago +1.5",
+    submittedAt: "2026-09-10T15:00:00.000Z",
+    result: "pending"
+  };
+}
+
 describe("pick rules", () => {
   it("requires exact NFL and NCAAF quotas for completion", () => {
     expect(pickSummary([pick("a", "NFL"), pick("b", "NFL"), pick("c", "NCAAF")], week).complete).toBe(false);
@@ -51,5 +72,33 @@ describe("pick rules", () => {
 
   it("allows replacing an existing pick when a card is full", () => {
     expect(() => validateQuota(week, "NFL", [pick("a", "NFL"), pick("b", "NFL"), pick("c", "NFL")], "a", "d")).not.toThrow();
+  });
+
+  it("requires exact NFL and NCAAF proposal limits for completion", () => {
+    expect(proposalSummary([proposal("a", "NFL"), proposal("b", "NFL"), proposal("c", "NCAAF")], week).complete).toBe(false);
+    expect(proposalSummary([
+      proposal("a", "NFL"),
+      proposal("b", "NFL"),
+      proposal("c", "NFL"),
+      proposal("d", "NCAAF"),
+      proposal("e", "NCAAF"),
+      proposal("f", "NCAAF")
+    ], week).complete).toBe(true);
+  });
+
+  it("blocks proposed lines beyond the sport limit", () => {
+    expect(() => validateProposalQuota(week, "NCAAF", [proposal("a", "NCAAF"), proposal("b", "NCAAF"), proposal("c", "NCAAF")], undefined)).toThrow("NCAAF proposal limit");
+  });
+
+  it("allows replacing an existing proposed line when a sport limit is full", () => {
+    expect(() => validateProposalQuota(week, "NCAAF", [proposal("a", "NCAAF"), proposal("b", "NCAAF"), proposal("c", "NCAAF")], "a")).not.toThrow();
+  });
+
+  it("inverts against responses while preserving pushes and pending results", () => {
+    expect(responseResult("win", "with")).toBe("win");
+    expect(responseResult("win", "against")).toBe("loss");
+    expect(responseResult("loss", "against")).toBe("win");
+    expect(responseResult("push", "against")).toBe("push");
+    expect(responseResult("pending", "against")).toBe("pending");
   });
 });

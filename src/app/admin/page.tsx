@@ -9,8 +9,9 @@ import {
   AppLeague,
   GameWithOptions,
   LeagueMember,
+  LineProposal,
   PickClaim,
-  PlayerPick,
+  ProposalResponse,
   ScrapeRun,
   Week,
   weekQuery
@@ -23,7 +24,8 @@ export default function AdminPage() {
   const [activeLeagueId, setActiveLeagueId] = useState("");
   const [week, setWeek] = useState<Week>();
   const [games, setGames] = useState<GameWithOptions[]>([]);
-  const [picks, setPicks] = useState<PlayerPick[]>([]);
+  const [proposals, setProposals] = useState<LineProposal[]>([]);
+  const [proposalResponses, setProposalResponses] = useState<ProposalResponse[]>([]);
   const [claims, setClaims] = useState<PickClaim[]>([]);
   const [members, setMembers] = useState<LeagueMember[]>([]);
   const [scrapeRuns, setScrapeRuns] = useState<ScrapeRun[]>([]);
@@ -62,14 +64,16 @@ export default function AdminPage() {
         week: Week;
         games: GameWithOptions[];
         claims: PickClaim[];
-        picks: PlayerPick[];
+        proposals: LineProposal[];
+        proposalResponses: ProposalResponse[];
         scrapeRuns: ScrapeRun[];
         members: LeagueMember[];
       }>(`/admin/week?${weekQuery(leagueId)}`);
       setWeek(payload.week);
       setGames(payload.games);
       setClaims(payload.claims);
-      setPicks(payload.picks);
+      setProposals(payload.proposals);
+      setProposalResponses(payload.proposalResponses);
       setScrapeRuns(payload.scrapeRuns);
       setMembers(payload.members);
       setNflQuota(String(payload.week.nflPickCountRequired));
@@ -109,7 +113,7 @@ export default function AdminPage() {
       setNcaafQuota(String(payload.week.ncaafPickCountRequired));
       setScrapeAtLocal(toDatetimeLocal(payload.week.scrapeAt));
       setCutoffAtLocal(toDatetimeLocal(payload.week.cutoffAt));
-      setStatus("Weekly quotas saved.");
+      setStatus("Weekly proposed-line limits saved.");
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Could not save quotas.");
     } finally {
@@ -174,7 +178,7 @@ export default function AdminPage() {
           <div>
             <p className="text-sm font-semibold uppercase tracking-[0.2em] text-turf">Admin Portal</p>
             <h1 className="text-4xl font-semibold">League Control</h1>
-            <p className="mt-2 text-ink/65">{week ? `${week.label} · DraftKings ${formatDateTime(week.scrapeAt)} · Picks close ${formatDateTime(week.cutoffAt)}` : "Manage league settings, invites, and weekly claims."}</p>
+            <p className="mt-2 text-ink/65">{week ? `${week.label} · DraftKings ${formatDateTime(week.scrapeAt)} · Picks close ${formatDateTime(week.cutoffAt)}` : "Manage league settings, invites, and weekly proposed lines."}</p>
           </div>
           <div className="rounded border border-ink/10 bg-white p-4">
             <h2 className="mb-2 font-semibold">Scraper Status</h2>
@@ -225,7 +229,7 @@ export default function AdminPage() {
             <h2 className="mb-3 text-xl font-semibold">Weekly Settings</h2>
             <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-[160px_160px_240px_240px_auto] lg:items-end">
               <label className="text-sm font-semibold">
-                NFL picks
+                NFL lines per member
                 <input
                   className="mt-1 w-full rounded border border-ink/20 px-3 py-2"
                   disabled={savingSettings}
@@ -238,7 +242,7 @@ export default function AdminPage() {
                 />
               </label>
               <label className="text-sm font-semibold">
-                CFB picks
+                CFB lines per member
                 <input
                   className="mt-1 w-full rounded border border-ink/20 px-3 py-2"
                   disabled={savingSettings}
@@ -299,15 +303,15 @@ export default function AdminPage() {
           </section>
 
           <section className="rounded border border-ink/10 bg-white p-4">
-            <h2 className="mb-3 text-xl font-semibold">Submitted Picks</h2>
+            <h2 className="mb-3 text-xl font-semibold">Proposed Lines</h2>
             <div className="grid gap-2 text-sm">
-              {picks.map((pick) => (
-                <div key={`${pick.userId}-${pick.optionId}`} className="rounded bg-ink/5 p-3">
-                  <div className="font-semibold">{pick.team}</div>
-                  <div className="text-ink/60">{pick.sportLeague} · {pick.market === "spread" ? "spread" : "team total"} · {pick.side} {pick.lineValue} · {pick.result}</div>
+              {proposals.map((proposal) => (
+                <div key={proposal.proposalId} className="rounded bg-ink/5 p-3">
+                  <div className="font-semibold">{proposal.team}</div>
+                  <div className="text-ink/60">{proposal.sportLeague} · {proposal.market === "spread" ? "spread" : "team total"} · {proposal.side} {proposal.lineValue} · proposed by {proposal.proposerLabel ?? proposal.proposerId} · {proposal.result}</div>
                 </div>
               ))}
-              {!picks.length ? <p className="text-ink/60">No picks submitted yet.</p> : null}
+              {!proposals.length ? <p className="text-ink/60">No lines proposed yet.</p> : null}
             </div>
           </section>
         </div>
@@ -317,7 +321,7 @@ export default function AdminPage() {
             <div key={game.gameId}>
               <GameOddsBoard game={game} claims={claims} mode="summary" />
               <div className="rounded-b border-x border-b border-ink/15 bg-white px-4 py-2 text-sm text-ink/60 shadow-sm ring-1 ring-ink/5">
-                {game.options.length} claimable options · {claims.filter((claim) => game.options.some((option) => option.optionId === claim.optionId)).length} claimed
+                {game.options.length} available options · {proposals.filter((proposal) => proposal.gameId === game.gameId).length} proposed · {proposalResponses.filter((response) => proposals.some((proposal) => proposal.gameId === game.gameId && proposal.proposalId === response.proposalId)).length} responses
               </div>
             </div>
           ))}
