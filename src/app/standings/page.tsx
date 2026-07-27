@@ -56,18 +56,40 @@ export default function StandingsPage() {
         </div>
         {status ? <div className="mt-4 rounded border border-ink/10 bg-white p-3 text-sm dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-200">{status}</div> : null}
         <div className="mt-6 overflow-hidden rounded border border-ink/10 bg-white dark:border-white/10 dark:bg-zinc-900">
+          {standings.length ? (
+            <div className="grid grid-cols-[44px_1fr_70px_70px_70px_86px] border-b border-ink/10 bg-ink/5 px-4 py-2 text-xs font-bold uppercase tracking-wide text-ink/55 dark:border-white/10 dark:bg-white/5 dark:text-zinc-400">
+              <span>Rank</span>
+              <span>Player</span>
+              <span>Wins</span>
+              <span>Losses</span>
+              <span>Pushes</span>
+              <span>Win %</span>
+            </div>
+          ) : null}
           {standings.map((row, index) => (
-            <div key={row.userId} className="grid grid-cols-[48px_1fr_90px_90px_90px] border-b border-ink/10 px-4 py-3 last:border-b-0 dark:border-white/10">
+            <div key={row.userId} className="grid grid-cols-[44px_1fr_70px_70px_70px_86px] border-b border-ink/10 px-4 py-3 last:border-b-0 dark:border-white/10">
               <span className="font-semibold">{index + 1}</span>
               <span>{row.displayName}</span>
-              <span>{row.wins} W</span>
-              <span>{row.losses} L</span>
-              <span>{row.pushes} P</span>
+              <span>{row.wins}</span>
+              <span>{row.losses}</span>
+              <span>{row.pushes}</span>
+              <span>{formatWinPercentage(row)}</span>
             </div>
           ))}
+          {standings[0]?.lastUpdatedAt ? (
+            <div className="border-t border-ink/10 px-4 py-2 text-xs text-ink/50 dark:border-white/10 dark:text-zinc-500">
+              Last updated {new Date(standings[0].lastUpdatedAt).toLocaleString()}
+            </div>
+          ) : null}
           {!standings.length && !status ? <div className="p-6 text-ink/60 dark:text-zinc-400">Standings will appear after picks are graded.</div> : null}
         </div>
       </section>
     </AppShell>
   );
+}
+
+function formatWinPercentage(row: Standing): string {
+  const decisions = row.wins + row.losses;
+  const pct = row.winPercentage ?? (decisions ? row.wins / decisions : 0);
+  return `${(pct * 100).toFixed(1)}%`;
 }

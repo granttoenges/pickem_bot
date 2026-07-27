@@ -24,6 +24,8 @@ The app is built to run locally and deploy cheaply on AWS with serverless servic
 - Member removal deletes league-specific history and resets the Cognito user only when that user has no other league memberships.
 - DraftKings scraper stores shared weekly games and opening odds for all leagues.
 - Opening lines are immutable; later line movement does not overwrite the first stored line.
+- Results sync uses a free public scoreboard source to update final scores, grade proposed lines/responses, and write standings.
+- Critical Lambda failures publish to the app SNS alarm topic; app Lambda logs retain for 14 days.
 
 ## Tech Stack
 
@@ -49,6 +51,7 @@ Common checks:
 npm run typecheck
 npm test
 npm run build
+npm run cdk:synth
 ```
 
 `npm run build` uses Next/Turbopack. In restricted sandbox environments it may need elevated local port permissions, but it works normally in a regular terminal and in Amplify.
@@ -168,13 +171,27 @@ Seed dummy data:
 npm run seed:dummy
 ```
 
+Seed standings-only test data:
+
+```bash
+npm run seed:standings
+```
+
 Backfill shared game records:
 
 ```bash
 node scripts/backfill-shared-games.cjs
 ```
 
+Apply the 15-day lifecycle rule to app-owned S3 log/CloudTrail-style buckets only:
+
+```bash
+npm run s3:lifecycle:app-logs
+```
+
 DraftKings odds are stored as shared source data by season/week/sport so every app league can use the same game board while keeping picks and membership separate.
+
+Final scores are fetched by the results sync from ESPN's public scoreboard JSON endpoints for NFL and college football. Admins can manually correct final scores in the admin console; standings are generated from stored opening lines and proposal responses.
 
 ## Documentation
 

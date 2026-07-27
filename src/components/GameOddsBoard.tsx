@@ -9,7 +9,8 @@ export function GameOddsBoard({
   userOptionIds = new Set<string>(),
   locked = false,
   mode = "claim",
-  onPick
+  onPick,
+  pendingOptionId
 }: {
   game: GameWithOptions;
   claims?: PickClaim[];
@@ -17,6 +18,7 @@ export function GameOddsBoard({
   locked?: boolean;
   mode?: Mode;
   onPick?: (option: PickOption) => void;
+  pendingOptionId?: string;
 }) {
   const claimByOption = new Map(claims.map((claim) => [claim.optionId, claim]));
   const awaySpread = findOption(game, "away-spread");
@@ -62,6 +64,7 @@ export function GameOddsBoard({
             locked={locked}
             mode={mode}
             onPick={onPick}
+            pendingOptionId={pendingOptionId}
           />
           <TeamMarketRow
             teamName={game.homeTeam}
@@ -74,6 +77,7 @@ export function GameOddsBoard({
             locked={locked}
             mode={mode}
             onPick={onPick}
+            pendingOptionId={pendingOptionId}
           />
         </div>
       </div>
@@ -100,7 +104,8 @@ function TeamMarketRow({
   userOptionIds,
   locked,
   mode,
-  onPick
+  onPick,
+  pendingOptionId
 }: {
   teamName: string;
   spread?: PickOption;
@@ -112,6 +117,7 @@ function TeamMarketRow({
   locked: boolean;
   mode: Mode;
   onPick?: (option: PickOption) => void;
+  pendingOptionId?: string;
 }) {
   return (
     <div className="grid min-h-[58px] grid-cols-[minmax(74px,1fr)_minmax(50px,64px)_minmax(50px,64px)_minmax(50px,64px)_minmax(54px,70px)] items-stretch border-b border-ink/15 last:border-b-0 sm:min-h-[72px] sm:grid-cols-[minmax(220px,1fr)_minmax(132px,180px)_minmax(90px,120px)_minmax(90px,120px)_minmax(132px,180px)] dark:border-white/10">
@@ -119,10 +125,10 @@ function TeamMarketRow({
         <TeamLogo teamName={teamName} size="sm" />
         <span className="min-w-0 truncate text-[11px] font-bold text-ink sm:text-sm dark:text-zinc-100">{teamName}</span>
       </div>
-      <OptionCell option={spread} claimByOption={claimByOption} userOptionIds={userOptionIds} locked={locked} mode={mode} onPick={onPick} />
-      <OptionCell option={over} claimByOption={claimByOption} userOptionIds={userOptionIds} locked={locked} mode={mode} onPick={onPick} compact />
-      <OptionCell option={under} claimByOption={claimByOption} userOptionIds={userOptionIds} locked={locked} mode={mode} onPick={onPick} compact />
-      <OptionCell option={gameTotal} claimByOption={claimByOption} userOptionIds={userOptionIds} locked={locked} mode={mode} onPick={onPick} compact />
+      <OptionCell option={spread} claimByOption={claimByOption} userOptionIds={userOptionIds} locked={locked} mode={mode} onPick={onPick} pendingOptionId={pendingOptionId} />
+      <OptionCell option={over} claimByOption={claimByOption} userOptionIds={userOptionIds} locked={locked} mode={mode} onPick={onPick} compact pendingOptionId={pendingOptionId} />
+      <OptionCell option={under} claimByOption={claimByOption} userOptionIds={userOptionIds} locked={locked} mode={mode} onPick={onPick} compact pendingOptionId={pendingOptionId} />
+      <OptionCell option={gameTotal} claimByOption={claimByOption} userOptionIds={userOptionIds} locked={locked} mode={mode} onPick={onPick} compact pendingOptionId={pendingOptionId} />
     </div>
   );
 }
@@ -134,7 +140,8 @@ function OptionCell({
   locked,
   mode,
   onPick,
-  compact = false
+  compact = false,
+  pendingOptionId
 }: {
   option?: PickOption;
   claimByOption: Map<string, PickClaim>;
@@ -143,6 +150,7 @@ function OptionCell({
   mode: Mode;
   onPick?: (option: PickOption) => void;
   compact?: boolean;
+  pendingOptionId?: string;
 }) {
   if (!option) {
     return (
@@ -154,7 +162,8 @@ function OptionCell({
 
   const claim = claimByOption.get(option.optionId);
   const mine = userOptionIds.has(option.optionId);
-  const disabled = mode === "summary" || locked || Boolean(claim && !mine);
+  const pending = pendingOptionId === option.optionId;
+  const disabled = mode === "summary" || locked || pending || Boolean(claim && !mine);
   const label = option.market === "spread"
     ? formatSigned(option.lineValue)
     : `${option.side === "over" ? "O" : "U"} ${option.lineValue}`;
@@ -167,7 +176,7 @@ function OptionCell({
       onClick={() => onPick?.(option)}
     >
       <span className={`${compact ? "text-[11px] sm:text-xs" : "text-xs sm:text-sm"} font-bold leading-none`}>{label}</span>
-      <span className="text-[9px] font-bold uppercase leading-none sm:text-[10px]">{actionLabel({ mine, claim: Boolean(claim), mode })}</span>
+      <span className="text-[9px] font-bold uppercase leading-none sm:text-[10px]">{pending ? "Saving" : actionLabel({ mine, claim: Boolean(claim), mode })}</span>
     </button>
   );
 }

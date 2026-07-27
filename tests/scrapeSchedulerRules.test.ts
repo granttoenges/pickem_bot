@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isScrapeDue } from "../src/backend/scrapeSchedulerRules";
+import { isScrapeDue, scrapeStatusFromPayload } from "../src/backend/scrapeSchedulerRules";
 import type { Week } from "../src/backend/types";
 
 const week: Week = {
@@ -27,5 +27,12 @@ describe("scrape scheduler rules", () => {
 
   it("does not rerun completed weeks", () => {
     expect(isScrapeDue({ ...week, scrapeStatus: "completed" }, new Date("2026-09-08T16:00:00.000Z"))).toBe(false);
+  });
+
+  it("maps scraper payloads to weekly scrape status", () => {
+    expect(scrapeStatusFromPayload({ games: [{ gameId: "a" }], errors: [] })).toBe("completed");
+    expect(scrapeStatusFromPayload({ games: [{ gameId: "a" }], errors: ["NCAAF failed"] })).toBe("partial");
+    expect(scrapeStatusFromPayload({ games: [], errors: ["blocked"] })).toBe("failed");
+    expect(scrapeStatusFromPayload(undefined)).toBe("failed");
   });
 });

@@ -16,7 +16,9 @@
     "cdk:deploy": "cdk deploy PickemBotV1Run2Stack --require-approval never",
     "bootstrap:super-admin": "node scripts/bootstrap-super-admin.cjs",
     "scraper:local": "python3 scraper/draftkings_scraper.py",
-    "seed:dummy": "node scripts/seed-dummy-data.cjs"
+    "seed:dummy": "node scripts/seed-dummy-data.cjs",
+    "seed:standings": "node scripts/seed-standings.cjs",
+    "s3:lifecycle:app-logs": "node scripts/apply-app-bucket-lifecycle.cjs"
   },
   "dependencies": {
     "@aws-sdk/client-cognito-identity-provider": "^3.1095.0",

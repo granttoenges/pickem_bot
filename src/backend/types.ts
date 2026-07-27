@@ -31,7 +31,7 @@ export interface Week {
   label: string;
   cutoffAt: string;
   scrapeAt?: string;
-  scrapeStatus?: "pending" | "running" | "completed" | "failed";
+  scrapeStatus?: "pending" | "running" | "completed" | "partial" | "failed";
   scrapeCompletedAt?: string;
   status: "draft" | "open" | "locked" | "graded";
   nflPickCountRequired: number;
@@ -153,11 +153,14 @@ export interface GameWithOptions extends Game {
 
 export interface Standing {
   leagueId: string;
+  seasonId?: string;
   userId: string;
   displayName: string;
   wins: number;
   losses: number;
   pushes: number;
+  winPercentage?: number;
+  lastUpdatedAt?: string;
 }
 
 export interface GradedPick extends PlayerPick {

@@ -54,6 +54,15 @@ const weekSettingsSchema = z.object({
   cutoffAt: z.string().datetime()
 });
 
+const resultCorrectionSchema = z.object({
+  leagueId: z.string().min(1),
+  seasonId: z.string().min(1),
+  weekId: z.string().min(1),
+  gameId: z.string().min(1),
+  awayScore: z.number().int().min(0),
+  homeScore: z.number().int().min(0)
+});
+
 const gameSchema = z.object({
   leagueId: z.string().default(defaultLeagueId),
   gameId: z.string(),
@@ -155,6 +164,14 @@ export async function handler(event: APIGatewayProxyEventV2WithJWTAuthorizer): P
       return json({ leagues: leagues.map(normalizeAppLeague) });
     }
 
+    if (method === "GET" && path === "/weeks") {
+      const leagueId = requireQuery(event, "leagueId");
+      const seasonId = event.queryStringParameters?.seasonId;
+      await requireLeagueAccess(repository, auth, leagueId);
+      const weeks = await repository.listWeeksForLeague(leagueId, seasonId);
+      return json({ weeks });
+    }
+
     if (method === "POST" && path === "/admin/leagues") {
       requireSuperAdmin(auth);
       const body = createLeagueSchema.parse(parseBody(event));
@@ -180,6 +197,7 @@ export async function handler(event: APIGatewayProxyEventV2WithJWTAuthorizer): P
         role: "league_admin",
         createdAt: now
       });
+      audit("league.create", auth, { leagueId: league.leagueId, name: league.name });
       return json({ league }, 201);
     }
 
@@ -189,6 +207,7 @@ export async function handler(event: APIGatewayProxyEventV2WithJWTAuthorizer): P
       await requireLeagueAdmin(repository, auth, leagueId);
       const body = leagueSettingsSchema.parse(parseBody(event));
       const league = await repository.updateAppLeaguePickMode(leagueId, body.pickMode);
+      audit("league.pickMode.update", auth, { leagueId, pickMode: body.pickMode });
       return json({ league: normalizeAppLeague(league) });
     }
 
@@ -205,6 +224,7 @@ export async function handler(event: APIGatewayProxyEventV2WithJWTAuthorizer): P
         createdAt: new Date().toISOString()
       };
       await repository.putLeagueMember(member);
+      audit("league.member.role.update", auth, { leagueId, targetUserId: body.userId, role: body.role });
       return json({ member });
     }
 
@@ -236,6 +256,7 @@ export async function handler(event: APIGatewayProxyEventV2WithJWTAuthorizer): P
       const cognitoDeleted = remainingMemberships.length === 0 && targetMember.email
         ? await deleteCognitoUserIfPresent(targetMember.email)
         : false;
+      audit("league.member.remove", auth, { leagueId, targetUserId: targetMember.userId, cognitoDeleted });
       return json({ ok: true, cognitoDeleted });
     }
 
@@ -325,7 +346,29 @@ export async function handler(event: APIGatewayProxyEventV2WithJWTAuthorizer): P
         scrapeAt: body.scrapeAt
       });
       await repository.putWeek(week);
+      audit("week.settings.update", auth, {
+        leagueId: body.leagueId,
+        seasonId: body.seasonId,
+        weekId: body.weekId,
+        nflPickCountRequired: body.nflPickCountRequired,
+        ncaafPickCountRequired: body.ncaafPickCountRequired,
+        scrapeAt: body.scrapeAt,
+        cutoffAt: body.cutoffAt
+      });
       return json({ week });
+    }
+
+    if (method === "PUT" && path === "/admin/results") {
+      const body = resultCorrectionSchema.parse(parseBody(event));
+      await requireLeagueAdmin(repository, auth, body.leagueId);
+      const games = await repository.listWeekGames(body.leagueId, body.seasonId, body.weekId);
+      const game = games.find((item) => item.gameId === body.gameId);
+      if (!game) {
+        return json({ message: "Game not found." }, 404);
+      }
+      await repository.updateGameResult(game, body.awayScore, body.homeScore);
+      audit("game.result.correct", auth, { leagueId: body.leagueId, seasonId: body.seasonId, weekId: body.weekId, gameId: body.gameId });
+      return json({ game: { ...game, status: "final", awayScore: body.awayScore, homeScore: body.homeScore } });
     }
 
     if (method === "PUT" && path === "/admin/board-lines") {
@@ -368,6 +411,7 @@ export async function handler(event: APIGatewayProxyEventV2WithJWTAuthorizer): P
         result: "pending"
       };
       await repository.putProposal(proposal);
+      audit("adminBoardLine.create", auth, { leagueId: body.leagueId, seasonId: body.seasonId, weekId: body.weekId, optionId: body.optionId });
       return json({ proposal });
     }
 
@@ -388,6 +432,7 @@ export async function handler(event: APIGatewayProxyEventV2WithJWTAuthorizer): P
       await Promise.all(responses
         .filter((response) => response.proposalId === body.proposalId)
         .map((response) => repository.deleteProposalResponse(body.leagueId, body.seasonId, body.weekId, body.proposalId, response.responderId)));
+      audit("adminBoardLine.delete", auth, { leagueId: body.leagueId, seasonId: body.seasonId, weekId: body.weekId, proposalId: body.proposalId });
       return json({ ok: true });
     }
 
@@ -395,6 +440,7 @@ export async function handler(event: APIGatewayProxyEventV2WithJWTAuthorizer): P
       const body = inviteSchema.parse(parseBody(event));
       await requireLeagueAdmin(repository, auth, body.leagueId);
       const member = await invitePlayer(repository, body.leagueId, body.email);
+      audit("league.member.invite", auth, { leagueId: body.leagueId, email: body.email });
       return json({ member }, 201);
     }
 
@@ -1038,14 +1084,14 @@ function corsHeaders(): Record<string, string> {
     .split(",")
     .map((origin) => origin.trim())
     .filter(Boolean);
-  const allowedOrigin = requestOrigin && allowedOrigins.includes(requestOrigin)
-    ? requestOrigin
-    : allowedOrigins[0] ?? "https://master.d3j7zlwjnm04rp.amplifyapp.com";
-  return {
-    "access-control-allow-origin": allowedOrigin,
+  const headers: Record<string, string> = {
     "access-control-allow-methods": "GET,POST,PUT,DELETE,OPTIONS",
     "access-control-allow-headers": "authorization,content-type"
   };
+  if (requestOrigin && allowedOrigins.includes(requestOrigin)) {
+    headers["access-control-allow-origin"] = requestOrigin;
+  }
+  return headers;
 }
 
 function slugify(value: string): string {
@@ -1056,4 +1102,15 @@ class SafeApiError extends Error {
   constructor(message: string, readonly statusCode: number) {
     super(message);
   }
+}
+
+function audit(action: string, auth: AuthState, detail: Record<string, unknown>): void {
+  console.log(JSON.stringify({
+    eventType: "admin_audit",
+    action,
+    actorUserId: auth.userId,
+    actorEmail: auth.email,
+    at: new Date().toISOString(),
+    detail
+  }));
 }

@@ -5,6 +5,7 @@ import { AppShell } from "../components/AppShell";
 import { GameOddsBoard } from "../components/GameOddsBoard";
 import { TeamLogo } from "../components/TeamLogo";
 import { apiGet, apiSend, AppLeague, GameWithOptions, LineProposal, PickClaim, PickOption, ProposalResponse, ProposalResponseStance, ProposalSummary, SportLeague, Week, weekQuery } from "../lib/api";
+import { appConfig } from "../lib/config";
 import { getPreferredLeagueId, persistPreferredLeagueId } from "../lib/leaguePreference";
 
 type Tab = "available" | "mine" | "league";
@@ -13,6 +14,9 @@ type SportFilter = "all" | SportLeague;
 export default function PlayerBoardPage() {
   const [leagues, setLeagues] = useState<AppLeague[]>([]);
   const [activeLeagueId, setActiveLeagueId] = useState("");
+  const [weeks, setWeeks] = useState<Week[]>([]);
+  const [activeSeasonId, setActiveSeasonId] = useState(appConfig.seasonId);
+  const [activeWeekId, setActiveWeekId] = useState(appConfig.weekId);
   const [week, setWeek] = useState<Week>();
   const [games, setGames] = useState<GameWithOptions[]>([]);
   const [claims, setClaims] = useState<PickClaim[]>([]);
@@ -26,6 +30,8 @@ export default function PlayerBoardPage() {
   const [replaceProposalId, setReplaceProposalId] = useState<string>();
   const [status, setStatus] = useState("Loading leagues...");
   const [quotaModalMessage, setQuotaModalMessage] = useState("");
+  const [pendingProposalId, setPendingProposalId] = useState<string>();
+  const [pendingOptionId, setPendingOptionId] = useState<string>();
   const quotaModalTimeout = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   const locked = useMemo(() => week ? new Date() >= new Date(week.cutoffAt) : false, [week]);
@@ -46,8 +52,27 @@ export default function PlayerBoardPage() {
     if (!activeLeagueId) {
       return;
     }
-    void loadWeek(activeLeagueId);
+    apiGet<{ weeks: Week[] }>(`/weeks?leagueId=${encodeURIComponent(activeLeagueId)}&seasonId=${encodeURIComponent(activeSeasonId)}`)
+      .then((payload) => {
+        setWeeks(payload.weeks);
+        const preferred = payload.weeks.find((item) => item.weekId === activeWeekId) ?? payload.weeks[0];
+        if (preferred) {
+          setActiveSeasonId(preferred.seasonId);
+          setActiveWeekId(preferred.weekId);
+          void loadWeek(activeLeagueId, preferred.seasonId, preferred.weekId);
+        } else {
+          void loadWeek(activeLeagueId, activeSeasonId, activeWeekId);
+        }
+      })
+      .catch(() => void loadWeek(activeLeagueId, activeSeasonId, activeWeekId));
   }, [activeLeagueId]);
+
+  useEffect(() => {
+    if (!activeLeagueId) {
+      return;
+    }
+    void loadWeek(activeLeagueId, activeSeasonId, activeWeekId);
+  }, [activeSeasonId, activeWeekId]);
 
   useEffect(() => {
     return () => {
@@ -68,7 +93,7 @@ export default function PlayerBoardPage() {
     }, 1000);
   }
 
-  async function loadWeek(leagueId = activeLeagueId) {
+  async function loadWeek(leagueId = activeLeagueId, seasonId = activeSeasonId, weekId = activeWeekId) {
     try {
       const payload = await apiGet<{
         pickMode: AppLeague["pickMode"];
@@ -80,7 +105,7 @@ export default function PlayerBoardPage() {
         proposalResponses: ProposalResponse[];
         userProposalResponses: ProposalResponse[];
         proposalSummary: ProposalSummary;
-      }>(`/week?${weekQuery(leagueId)}`);
+      }>(`/week?${weekQuery(leagueId, seasonId, weekId)}`);
       setWeek(payload.week);
       setGames(payload.games);
       setClaims(payload.claims);
@@ -117,6 +142,7 @@ export default function PlayerBoardPage() {
       return;
     }
     try {
+      setPendingOptionId(option.optionId);
       await apiSend("/proposals", "PUT", {
         leagueId: option.leagueId,
         seasonId: option.seasonId,
@@ -128,6 +154,8 @@ export default function PlayerBoardPage() {
       await loadWeek();
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Could not propose line.");
+    } finally {
+      setPendingOptionId(undefined);
     }
   }
 
@@ -154,6 +182,7 @@ export default function PlayerBoardPage() {
       return;
     }
     try {
+      setPendingProposalId(proposal.proposalId);
       await apiSend("/proposal-responses", "PUT", {
         leagueId: proposal.leagueId,
         seasonId: proposal.seasonId,
@@ -166,6 +195,8 @@ export default function PlayerBoardPage() {
       setTab("league");
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Could not save response.");
+    } finally {
+      setPendingProposalId(undefined);
     }
   }
 
@@ -207,6 +238,19 @@ export default function PlayerBoardPage() {
                 }}
               >
                 {leagues.map((league) => <option key={league.leagueId} value={league.leagueId}>{league.name}</option>)}
+              </select>
+            ) : null}
+            {weeks.length > 1 ? (
+              <select
+                className="rounded border border-ink/20 bg-white px-3 py-2 dark:border-white/15 dark:bg-zinc-900 dark:text-zinc-100"
+                value={`${activeSeasonId}#${activeWeekId}`}
+                onChange={(event) => {
+                  const [seasonId, weekId] = event.target.value.split("#");
+                  setActiveSeasonId(seasonId);
+                  setActiveWeekId(weekId);
+                }}
+              >
+                {weeks.map((item) => <option key={`${item.seasonId}#${item.weekId}`} value={`${item.seasonId}#${item.weekId}`}>{item.seasonId} Week {item.weekId}</option>)}
               </select>
             ) : null}
             <span className={`rounded px-3 py-2 text-sm font-semibold ${locked ? "bg-red-100 text-red-800" : "bg-turf text-white"}`}>
@@ -263,6 +307,7 @@ export default function PlayerBoardPage() {
                 locked={locked || pickMode === "admin_selected"}
                 mode={pickMode === "admin_selected" ? "summary" : "claim"}
                 onPick={pickMode === "admin_selected" ? undefined : proposeOption}
+                pendingOptionId={pendingOptionId}
               />
             ))}
             {!filteredGames.length && !status ? <div className="rounded border border-ink/10 bg-white p-6 dark:border-white/10 dark:bg-zinc-900">No {emptySportLabel}games are available for this league week yet.</div> : null}
@@ -306,6 +351,8 @@ export default function PlayerBoardPage() {
             {filteredOtherProposals.map((proposal) => {
               const response = userResponseByProposal.get(proposal.proposalId);
               const game = gamesById.get(proposal.gameId);
+              const totals = responseTotals(proposal.proposalId, proposalResponses);
+              const responsePending = pendingProposalId === proposal.proposalId;
               return (
                 <article key={proposal.proposalId} className="rounded border border-ink/15 bg-white p-4 shadow-sm ring-1 ring-ink/5 dark:border-white/15 dark:bg-zinc-900 dark:ring-white/5">
                   <div className="flex flex-wrap items-start justify-between gap-3">
@@ -315,6 +362,7 @@ export default function PlayerBoardPage() {
                         <div className="text-xs font-bold uppercase tracking-wide text-turf">{proposal.sportLeague} · proposed by {proposal.proposerLabel ?? "member"}</div>
                         <h2 className="mt-1 text-lg font-semibold">{proposal.label}</h2>
                         <p className="text-sm text-ink/60 dark:text-zinc-400">{formatMarket(proposal)} · {gameLabel(game)}</p>
+                        <p className="mt-1 text-xs font-semibold text-ink/50 dark:text-zinc-500">{totals.with} with / {totals.against} against</p>
                       </div>
                     </div>
                     {response ? <span className="rounded bg-gold/25 px-3 py-1 text-xs font-bold uppercase text-ink dark:text-zinc-100">{response.stance}</span> : null}
@@ -322,17 +370,17 @@ export default function PlayerBoardPage() {
                   <div className="mt-4 flex gap-2">
                     <button
                       className={`rounded px-4 py-2 text-sm font-semibold disabled:bg-ink/20 disabled:text-ink/40 dark:disabled:bg-white/10 dark:disabled:text-zinc-600 ${response?.stance === "with" ? "bg-gold text-ink" : "border border-ink/20 bg-white text-ink dark:border-white/15 dark:bg-zinc-900 dark:text-zinc-100"}`}
-                      disabled={locked}
+                      disabled={locked || responsePending}
                       onClick={() => respondToProposal(proposal, "with")}
                     >
-                      With
+                      {responsePending ? "Saving..." : "With"}
                     </button>
                     <button
                       className={`rounded px-4 py-2 text-sm font-semibold disabled:bg-ink/20 disabled:text-ink/40 dark:disabled:bg-white/10 dark:disabled:text-zinc-600 ${response?.stance === "against" ? "bg-gold text-ink" : "border border-ink/20 bg-white text-ink dark:border-white/15 dark:bg-zinc-900 dark:text-zinc-100"}`}
-                      disabled={locked}
+                      disabled={locked || responsePending}
                       onClick={() => respondToProposal(proposal, "against")}
                     >
-                      Against
+                      {responsePending ? "Saving..." : "Against"}
                     </button>
                   </div>
                 </article>
@@ -383,6 +431,19 @@ function filterBySport<T extends { sportLeague: SportLeague }>(items: T[], filte
     return items;
   }
   return items.filter((item) => item.sportLeague === filter);
+}
+
+function responseTotals(proposalId: string, responses: ProposalResponse[]): { with: number; against: number } {
+  return responses
+    .filter((response) => response.proposalId === proposalId)
+    .reduce((totals, response) => {
+      if (response.stance === "with") {
+        totals.with += 1;
+      } else {
+        totals.against += 1;
+      }
+      return totals;
+    }, { with: 0, against: 0 });
 }
 
 function formatMarket(proposal: LineProposal): string {

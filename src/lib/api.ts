@@ -76,6 +76,8 @@ export interface GameWithOptions {
   homeTeam: string;
   kickoffAt: string;
   status: "scheduled" | "final";
+  homeScore?: number;
+  awayScore?: number;
   adminNote?: string;
   overrideSource?: string;
   lines: OpeningLine[];
@@ -89,7 +91,7 @@ export interface Week {
   label: string;
   cutoffAt: string;
   scrapeAt?: string;
-  scrapeStatus?: "pending" | "running" | "completed" | "failed";
+  scrapeStatus?: "pending" | "running" | "completed" | "partial" | "failed";
   scrapeCompletedAt?: string;
   status: string;
   nflPickCountRequired: number;
@@ -160,11 +162,14 @@ export interface ScrapeRun {
 
 export interface Standing {
   leagueId: string;
+  seasonId?: string;
   userId: string;
   displayName: string;
   wins: number;
   losses: number;
   pushes: number;
+  winPercentage?: number;
+  lastUpdatedAt?: string;
 }
 
 export interface PickSummary {
@@ -206,6 +211,6 @@ async function apiRequest<T>(path: string, init: RequestInit): Promise<T> {
   return payload as T;
 }
 
-export function weekQuery(leagueId: string): string {
-  return `leagueId=${encodeURIComponent(leagueId)}&seasonId=${encodeURIComponent(appConfig.seasonId)}&weekId=${encodeURIComponent(appConfig.weekId)}`;
+export function weekQuery(leagueId: string, seasonId = appConfig.seasonId, weekId = appConfig.weekId): string {
+  return `leagueId=${encodeURIComponent(leagueId)}&seasonId=${encodeURIComponent(seasonId)}&weekId=${encodeURIComponent(weekId)}`;
 }

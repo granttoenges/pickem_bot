@@ -84,9 +84,11 @@ Core endpoints:
 - `PUT /admin/leagues/{leagueId}/members`
 - `DELETE /admin/leagues/{leagueId}/members`
 - `POST /admin/invites`
+- `GET /weeks?leagueId=...&seasonId=...`
 - `GET /week?leagueId=...&seasonId=...&weekId=...`
 - `GET /admin/week?leagueId=...&seasonId=...&weekId=...`
 - `PUT /admin/week/settings`
+- `PUT /admin/results`
 - `PUT /admin/board-lines`
 - `DELETE /admin/board-lines`
 - `PUT /proposals`
@@ -153,6 +155,13 @@ Scraper behavior:
 - It does not overwrite existing opening-line items.
 - Admin review/manual correction remains the fallback for missing markets.
 
+## Results Sync
+
+- Results sync uses a free public scoreboard JSON source for NFL and NCAAF final scores.
+- It matches scores to stored games by sport, teams, and kickoff date where available.
+- It updates final game scores, grades proposals from immutable opening lines, grades with/against responses, and writes league standings.
+- Admins can manually correct final scores through `PUT /admin/results`; corrected scores are used by later grading.
+
 ## AWS Deployment
 
 Active deployment:
@@ -172,7 +181,8 @@ AWS services:
 - DynamoDB on-demand table with point-in-time recovery, deletion protection, and retain policy.
 - EventBridge schedules.
 - Secrets Manager secret `pickem-bot-v1-run2-github-pat`.
-- CloudWatch log groups with retention.
+- CloudWatch log groups with 14-day retention.
+- Minimal CloudWatch alarms for Lambda errors and one SNS email topic.
 
 Cost controls:
 
@@ -180,6 +190,8 @@ Cost controls:
 - DynamoDB uses pay-per-request capacity.
 - Scraper is invoked only when due weeks are pending.
 - API Gateway throttling is configured.
+- DynamoDB GSIs, paid score APIs, WAF, and new CloudTrail trails are intentionally deferred.
+- App-owned S3 log/CloudTrail-style buckets can be configured with 15-day expiration using the guarded lifecycle script.
 
 Deployment commands:
 
@@ -187,6 +199,7 @@ Deployment commands:
 npm run cdk:synth
 npm run cdk:deploy
 npm run bootstrap:super-admin
+npm run s3:lifecycle:app-logs
 ```
 
 Amplify is included by default. It is disabled only when `ENABLE_AMPLIFY=false`.
@@ -205,6 +218,7 @@ Seed dummy data:
 
 ```bash
 npm run seed:dummy
+npm run seed:standings
 ```
 
 Run the legacy Python scraper locally:

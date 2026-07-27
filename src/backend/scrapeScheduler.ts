@@ -1,7 +1,7 @@
 import { InvokeCommand, LambdaClient } from "@aws-sdk/client-lambda";
 import type { EventBridgeEvent } from "aws-lambda";
 import { PickemRepository } from "./repository";
-import { isScrapeDue } from "./scrapeSchedulerRules";
+import { isScrapeDue, scrapeStatusFromPayload } from "./scrapeSchedulerRules";
 
 const lambda = new LambdaClient({});
 
@@ -15,7 +15,7 @@ export async function handler(_event: EventBridgeEvent<"Scheduled Event", unknow
   for (const week of dueWeeks) {
     try {
       await repository.updateWeekScrapeStatus(week, "running");
-      await lambda.send(new InvokeCommand({
+      const result = await lambda.send(new InvokeCommand({
         FunctionName: process.env.SCRAPER_FUNCTION_NAME,
         InvocationType: "RequestResponse",
         Payload: Buffer.from(JSON.stringify({
@@ -27,8 +27,16 @@ export async function handler(_event: EventBridgeEvent<"Scheduled Event", unknow
           }
         }))
       }));
-      await repository.updateWeekScrapeStatus(week, "completed", new Date().toISOString());
-      invoked += 1;
+      if (result.FunctionError) {
+        throw new Error(`Scraper Lambda returned ${result.FunctionError}.`);
+      }
+      const status = scrapeStatusFromPayload(parsePayload(result.Payload));
+      await repository.updateWeekScrapeStatus(week, status, new Date().toISOString());
+      if (status === "failed") {
+        failed += 1;
+      } else {
+        invoked += 1;
+      }
     } catch (error) {
       failed += 1;
       await repository.updateWeekScrapeStatus(week, "failed", new Date().toISOString());
@@ -37,4 +45,15 @@ export async function handler(_event: EventBridgeEvent<"Scheduled Event", unknow
   }
 
   return { checked: dueWeeks.length, invoked, failed };
+}
+
+function parsePayload(payload?: Uint8Array): unknown {
+  if (!payload) {
+    return undefined;
+  }
+  try {
+    return JSON.parse(Buffer.from(payload).toString("utf8"));
+  } catch {
+    return undefined;
+  }
 }

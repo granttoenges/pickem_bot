@@ -17,6 +17,7 @@ import {
   Week,
   weekQuery
 } from "../../lib/api";
+import { appConfig } from "../../lib/config";
 import { getStoredSession, SessionState } from "../../lib/auth";
 import { getPreferredLeagueId, persistPreferredLeagueId } from "../../lib/leaguePreference";
 import { isValidQuotaInput, parseQuotaInput } from "../../lib/quotaInput";
@@ -24,6 +25,9 @@ import { isValidQuotaInput, parseQuotaInput } from "../../lib/quotaInput";
 export default function AdminPage() {
   const [leagues, setLeagues] = useState<AppLeague[]>([]);
   const [activeLeagueId, setActiveLeagueId] = useState("");
+  const [weeks, setWeeks] = useState<Week[]>([]);
+  const [activeSeasonId, setActiveSeasonId] = useState(appConfig.seasonId);
+  const [activeWeekId, setActiveWeekId] = useState(appConfig.weekId);
   const [week, setWeek] = useState<Week>();
   const [games, setGames] = useState<GameWithOptions[]>([]);
   const [proposals, setProposals] = useState<LineProposal[]>([]);
@@ -39,6 +43,11 @@ export default function AdminPage() {
   const [scrapeAtLocal, setScrapeAtLocal] = useState("");
   const [cutoffAtLocal, setCutoffAtLocal] = useState("");
   const [savingSettings, setSavingSettings] = useState(false);
+  const [invitingPlayer, setInvitingPlayer] = useState(false);
+  const [removingUserId, setRemovingUserId] = useState<string>();
+  const [pendingBoardOptionId, setPendingBoardOptionId] = useState<string>();
+  const [savingResultGameId, setSavingResultGameId] = useState<string>();
+  const [scoreEdits, setScoreEdits] = useState<Record<string, { away: string; home: string }>>({});
   const [showCreateLeague, setShowCreateLeague] = useState(false);
   const [creatingLeague, setCreatingLeague] = useState(false);
   const [session, setSession] = useState<SessionState>();
@@ -62,11 +71,29 @@ export default function AdminPage() {
 
   useEffect(() => {
     if (activeLeagueId) {
-      void load(activeLeagueId);
+      apiGet<{ weeks: Week[] }>(`/weeks?leagueId=${encodeURIComponent(activeLeagueId)}&seasonId=${encodeURIComponent(activeSeasonId)}`)
+        .then((payload) => {
+          setWeeks(payload.weeks);
+          const preferred = payload.weeks.find((item) => item.weekId === activeWeekId) ?? payload.weeks[0];
+          if (preferred) {
+            setActiveSeasonId(preferred.seasonId);
+            setActiveWeekId(preferred.weekId);
+            void load(activeLeagueId, preferred.seasonId, preferred.weekId);
+          } else {
+            void load(activeLeagueId, activeSeasonId, activeWeekId);
+          }
+        })
+        .catch(() => void load(activeLeagueId, activeSeasonId, activeWeekId));
     }
   }, [activeLeagueId]);
 
-  async function load(leagueId = activeLeagueId) {
+  useEffect(() => {
+    if (activeLeagueId) {
+      void load(activeLeagueId, activeSeasonId, activeWeekId);
+    }
+  }, [activeSeasonId, activeWeekId]);
+
+  async function load(leagueId = activeLeagueId, seasonId = activeSeasonId, weekId = activeWeekId) {
     try {
       const payload = await apiGet<{
         league?: AppLeague;
@@ -78,7 +105,7 @@ export default function AdminPage() {
         proposalResponses: ProposalResponse[];
         scrapeRuns: ScrapeRun[];
         members: LeagueMember[];
-      }>(`/admin/week?${weekQuery(leagueId)}`);
+      }>(`/admin/week?${weekQuery(leagueId, seasonId, weekId)}`);
       setWeek(payload.week);
       setGames(payload.games);
       setClaims(payload.claims);
@@ -142,6 +169,7 @@ export default function AdminPage() {
     if (!activeLeagueId || !inviteEmail) {
       return;
     }
+    setInvitingPlayer(true);
     try {
       await apiSend("/admin/invites", "POST", { leagueId: activeLeagueId, email: inviteEmail });
       setInviteEmail("");
@@ -149,6 +177,8 @@ export default function AdminPage() {
       await load();
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Could not send invite.");
+    } finally {
+      setInvitingPlayer(false);
     }
   }
 
@@ -192,6 +222,7 @@ export default function AdminPage() {
     if (!window.confirm(`Remove ${label} from this league? This deletes their league picks, proposals, responses, and standings history.`)) {
       return;
     }
+    setRemovingUserId(member.userId);
     try {
       const payload = await apiSend<{ cognitoDeleted?: boolean }>(`/admin/leagues/${encodeURIComponent(member.leagueId)}/members`, "DELETE", {
         userId: member.userId
@@ -200,6 +231,8 @@ export default function AdminPage() {
       await load();
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Could not remove member.");
+    } finally {
+      setRemovingUserId(undefined);
     }
   }
 
@@ -208,6 +241,7 @@ export default function AdminPage() {
       return;
     }
     const existing = proposals.find((proposal) => proposal.proposalSource === "admin_selected" && proposal.optionId === option.optionId);
+    setPendingBoardOptionId(option.optionId);
     try {
       if (existing) {
         await apiSend("/admin/board-lines", "DELETE", {
@@ -229,6 +263,38 @@ export default function AdminPage() {
       await load();
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Could not update league board line.");
+    } finally {
+      setPendingBoardOptionId(undefined);
+    }
+  }
+
+  async function saveResult(game: GameWithOptions) {
+    if (!week) {
+      return;
+    }
+    const scores = scoreEdits[game.gameId] ?? { away: String(game.awayScore ?? ""), home: String(game.homeScore ?? "") };
+    const awayScore = Number(scores.away);
+    const homeScore = Number(scores.home);
+    if (!Number.isInteger(awayScore) || !Number.isInteger(homeScore) || awayScore < 0 || homeScore < 0) {
+      setStatus("Enter valid non-negative final scores.");
+      return;
+    }
+    setSavingResultGameId(game.gameId);
+    try {
+      await apiSend("/admin/results", "PUT", {
+        leagueId: week.leagueId,
+        seasonId: week.seasonId,
+        weekId: week.weekId,
+        gameId: game.gameId,
+        awayScore,
+        homeScore
+      });
+      setStatus("Final score saved. Results sync will grade standings from stored opening lines.");
+      await load();
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "Could not save final score.");
+    } finally {
+      setSavingResultGameId(undefined);
     }
   }
 
@@ -269,6 +335,19 @@ export default function AdminPage() {
             >
               {leagues.map((league) => <option key={league.leagueId} value={league.leagueId}>{league.name}</option>)}
             </select>
+            {weeks.length > 1 ? (
+              <select
+                className="mt-3 w-full rounded border border-ink/20 bg-white px-3 py-2 dark:border-white/15 dark:bg-zinc-950 dark:text-zinc-100"
+                value={`${activeSeasonId}#${activeWeekId}`}
+                onChange={(event) => {
+                  const [seasonId, weekId] = event.target.value.split("#");
+                  setActiveSeasonId(seasonId);
+                  setActiveWeekId(weekId);
+                }}
+              >
+                {weeks.map((item) => <option key={`${item.seasonId}#${item.weekId}`} value={`${item.seasonId}#${item.weekId}`}>{item.seasonId} Week {item.weekId}</option>)}
+              </select>
+            ) : null}
           </div>
           <div className="rounded border border-ink/10 bg-white p-4 dark:border-white/10 dark:bg-zinc-900">
             <h2 className="mb-3 font-semibold">League Actions</h2>
@@ -280,7 +359,9 @@ export default function AdminPage() {
             <h2 className="mb-3 font-semibold">Invite Player</h2>
             <div className="flex gap-2">
               <input className="min-w-0 flex-1 rounded border border-ink/20 px-3 py-2 text-sm dark:border-white/15 dark:bg-zinc-950 dark:text-zinc-100" type="email" value={inviteEmail} onChange={(event) => setInviteEmail(event.target.value)} placeholder="friend@example.com" />
-              <button className="rounded bg-turf px-4 py-2 text-sm font-semibold text-white">Invite</button>
+              <button className="rounded bg-turf px-4 py-2 text-sm font-semibold text-white disabled:bg-turf/50" disabled={invitingPlayer}>
+                {invitingPlayer ? "Sending..." : "Invite"}
+              </button>
             </div>
           </form>
         </div>
@@ -378,8 +459,8 @@ export default function AdminPage() {
                     <option value="league_admin">League admin</option>
                   </select>
                   {canShowRemoveMember(member, session) ? (
-                    <button className="rounded border border-red-200 bg-white px-3 py-2 font-semibold text-red-700 hover:bg-red-50 dark:border-red-400/30 dark:bg-zinc-900 dark:text-red-300 dark:hover:bg-red-400/10" onClick={() => removeMember(member)}>
-                      Remove
+                    <button className="rounded border border-red-200 bg-white px-3 py-2 font-semibold text-red-700 hover:bg-red-50 disabled:text-red-300 dark:border-red-400/30 dark:bg-zinc-900 dark:text-red-300 dark:hover:bg-red-400/10 dark:disabled:text-red-900" disabled={removingUserId === member.userId} onClick={() => removeMember(member)}>
+                      {removingUserId === member.userId ? "Removing..." : "Remove"}
                     </button>
                   ) : (
                     <span className="hidden md:block" />
@@ -414,9 +495,35 @@ export default function AdminPage() {
                 userOptionIds={new Set(proposals.filter((proposal) => proposal.proposalSource === "admin_selected").map((proposal) => proposal.optionId))}
                 locked={!week || new Date() >= new Date(week.cutoffAt)}
                 onPick={pickMode === "admin_selected" ? toggleAdminBoardLine : undefined}
+                pendingOptionId={pendingBoardOptionId}
               />
               <div className="rounded-b border-x border-b border-ink/15 bg-white px-4 py-2 text-sm text-ink/60 shadow-sm ring-1 ring-ink/5 dark:border-white/15 dark:bg-zinc-900 dark:text-zinc-400 dark:ring-white/5">
-                {game.options.length} available options · {proposals.filter((proposal) => proposal.gameId === game.gameId && proposal.proposalSource === "admin_selected").length} league board lines · {proposals.filter((proposal) => proposal.gameId === game.gameId && proposal.proposalSource !== "admin_selected").length} member proposed · {proposalResponses.filter((response) => proposals.some((proposal) => proposal.gameId === game.gameId && proposal.proposalId === response.proposalId)).length} responses
+                <div>{game.options.length} available options · {proposals.filter((proposal) => proposal.gameId === game.gameId && proposal.proposalSource === "admin_selected").length} league board lines · {proposals.filter((proposal) => proposal.gameId === game.gameId && proposal.proposalSource !== "admin_selected").length} member proposed · {proposalResponses.filter((response) => proposals.some((proposal) => proposal.gameId === game.gameId && proposal.proposalId === response.proposalId)).length} responses</div>
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  <span className="font-semibold text-ink/70 dark:text-zinc-300">Final score</span>
+                  <label className="text-xs">
+                    {game.awayTeam}
+                    <input
+                      className="ml-1 w-16 rounded border border-ink/15 bg-white px-2 py-1 dark:border-white/15 dark:bg-zinc-950"
+                      inputMode="numeric"
+                      value={scoreEdits[game.gameId]?.away ?? String(game.awayScore ?? "")}
+                      onChange={(event) => setScoreEdits((current) => ({ ...current, [game.gameId]: { away: event.target.value, home: current[game.gameId]?.home ?? String(game.homeScore ?? "") } }))}
+                    />
+                  </label>
+                  <label className="text-xs">
+                    {game.homeTeam}
+                    <input
+                      className="ml-1 w-16 rounded border border-ink/15 bg-white px-2 py-1 dark:border-white/15 dark:bg-zinc-950"
+                      inputMode="numeric"
+                      value={scoreEdits[game.gameId]?.home ?? String(game.homeScore ?? "")}
+                      onChange={(event) => setScoreEdits((current) => ({ ...current, [game.gameId]: { away: current[game.gameId]?.away ?? String(game.awayScore ?? ""), home: event.target.value } }))}
+                    />
+                  </label>
+                  <button className="rounded border border-ink/15 px-3 py-1 text-xs font-semibold disabled:text-ink/30 dark:border-white/15 dark:disabled:text-zinc-600" disabled={savingResultGameId === game.gameId} onClick={() => saveResult(game)}>
+                    {savingResultGameId === game.gameId ? "Saving..." : "Save Final"}
+                  </button>
+                  {game.status === "final" ? <span className="text-xs font-semibold text-turf">Final</span> : null}
+                </div>
               </div>
             </div>
           ))}

@@ -11,6 +11,7 @@ The deployed app is serverless AWS:
 - API Gateway HTTP API with Lambda backend.
 - DynamoDB single-table storage.
 - EventBridge scheduler for DraftKings scrape checks.
+- EventBridge results sync for free public scoreboard final scores and standings.
 - CDK TypeScript infrastructure.
 
 Do not add The Odds API or any paid odds provider.
@@ -59,7 +60,8 @@ Only update active run2 resources unless the user explicitly says otherwise. Do 
   - `pickRules.ts`, `grading.ts`, `time.ts`, `weekSettingsRules.ts`: pure business rules.
   - `draftkingsScraper.ts`: scraper Lambda.
   - `scrapeScheduler.ts`: EventBridge-driven scraper scheduler.
-  - `resultsHandler.ts`: results sync placeholder/handler.
+- `resultsHandler.ts`: results sync placeholder/handler.
+  - Results sync uses free public scoreboard data, updates final scores, grades proposals/responses, and writes standings.
 - `infra/`: CDK app and stack.
 - `scripts/`: seed and backfill scripts.
 - `scraper/`: legacy/local Python scraper assets.
@@ -110,6 +112,8 @@ npm run cdk:synth
 npm run cdk:deploy
 npm run bootstrap:super-admin
 npm run seed:dummy
+npm run seed:standings
+npm run s3:lifecycle:app-logs
 ```
 
 Bootstrap:
@@ -157,5 +161,6 @@ Keep these files current when product or infrastructure behavior changes:
 - Use `apply_patch` for file edits.
 - Do not print secrets.
 - Do not add `AWS::Cognito::UserPoolUser` or `AWS::Cognito::UserPoolUserToGroupAttachment` resources to CDK.
+- Do not apply S3 lifecycle rules to unrelated buckets. The lifecycle script must only touch buckets named or tagged for `pickem-bot-v1-run2` and used for logs/CloudTrail-style logs.
 - Do not run destructive AWS or git commands unless the user explicitly asks and the scope is clear.
 - Keep AWS changes scoped to `PickemBotV1Run2Stack`.

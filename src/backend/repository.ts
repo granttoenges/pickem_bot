@@ -214,6 +214,31 @@ export class PickemRepository {
     return (result.Items ?? []) as Week[];
   }
 
+  async listWeeks(): Promise<Week[]> {
+    const result = await client.send(new ScanCommand({
+      TableName: this.tableName,
+      FilterExpression: "entityType = :entityType",
+      ExpressionAttributeValues: {
+        ":entityType": "Week"
+      }
+    }));
+    return (result.Items ?? []) as Week[];
+  }
+
+  async listWeeksForLeague(leagueId: string, seasonId?: string): Promise<Week[]> {
+    const result = await client.send(new ScanCommand({
+      TableName: this.tableName,
+      FilterExpression: "entityType = :entityType and leagueId = :leagueId",
+      ExpressionAttributeValues: {
+        ":entityType": "Week",
+        ":leagueId": leagueId
+      }
+    }));
+    return ((result.Items ?? []) as Week[])
+      .filter((week) => !seasonId || week.seasonId === seasonId)
+      .sort((a, b) => a.seasonId.localeCompare(b.seasonId) || Number(a.weekId) - Number(b.weekId));
+  }
+
   async updateWeekScrapeStatus(week: Week, scrapeStatus: NonNullable<Week["scrapeStatus"]>, scrapeCompletedAt?: string): Promise<void> {
     await this.putWeek({
       ...week,
@@ -272,6 +297,38 @@ export class PickemRepository {
         ...normalized
       }
     }));
+  }
+
+  async updateGameResult(game: Game, awayScore: number, homeScore: number): Promise<void> {
+    const normalized = normalizeGame(game);
+    const updates = [
+      { pk: sourceWeekPk(normalized.seasonId, normalized.weekId), sk: `GAME#${normalized.gameId}` },
+      { pk: weekPk(normalized.leagueId, normalized.seasonId, normalized.weekId), sk: `GAME#${normalized.gameId}` }
+    ];
+
+    for (const key of updates) {
+      try {
+        await client.send(new UpdateCommand({
+          TableName: this.tableName,
+          Key: key,
+          UpdateExpression: "set #status = :status, awayScore = :awayScore, homeScore = :homeScore",
+          ConditionExpression: "attribute_exists(pk)",
+          ExpressionAttributeNames: {
+            "#status": "status"
+          },
+          ExpressionAttributeValues: {
+            ":status": "final",
+            ":awayScore": awayScore,
+            ":homeScore": homeScore
+          }
+        }));
+      } catch (error) {
+        if (error instanceof Error && error.name === "ConditionalCheckFailedException") {
+          continue;
+        }
+        throw error;
+      }
+    }
   }
 
   async putSharedGame(game: Game): Promise<void> {
@@ -477,6 +534,34 @@ export class PickemRepository {
     }));
   }
 
+  async updateProposalResult(proposal: LineProposal, result: LineProposal["result"]): Promise<void> {
+    await client.send(new UpdateCommand({
+      TableName: this.tableName,
+      Key: { pk: proposalsPk(proposal.leagueId, proposal.seasonId, proposal.weekId), sk: proposalSk(proposal.proposerId, proposal.proposalId) },
+      UpdateExpression: "set #result = :result",
+      ExpressionAttributeNames: {
+        "#result": "result"
+      },
+      ExpressionAttributeValues: {
+        ":result": result
+      }
+    }));
+  }
+
+  async updateProposalResponseResult(response: ProposalResponse, result: ProposalResponse["result"]): Promise<void> {
+    await client.send(new UpdateCommand({
+      TableName: this.tableName,
+      Key: { pk: proposalResponsesPk(response.leagueId, response.seasonId, response.weekId), sk: responseSk(response.proposalId, response.responderId) },
+      UpdateExpression: "set #result = :result",
+      ExpressionAttributeNames: {
+        "#result": "result"
+      },
+      ExpressionAttributeValues: {
+        ":result": result
+      }
+    }));
+  }
+
   async deleteProposalResponse(leagueId: string, seasonId: string, weekId: string, proposalId: string, responderId: string): Promise<void> {
     await client.send(new DeleteCommand({
       TableName: this.tableName,
@@ -574,7 +659,19 @@ export class PickemRepository {
         ":pk": `STANDINGS#${leagueId}#${seasonId}`
       }
     }));
-    return (result.Items ?? []) as Standing[];
+    return ((result.Items ?? []) as Standing[]).sort(compareStandings);
+  }
+
+  async putStanding(standing: Standing): Promise<void> {
+    await client.send(new PutCommand({
+      TableName: this.tableName,
+      Item: {
+        pk: `STANDINGS#${standing.leagueId}#${standing.seasonId}`,
+        sk: `USER#${standing.userId}`,
+        entityType: "Standing",
+        ...standing
+      }
+    }));
   }
 
   async listScrapeRuns(seasonId: string, weekId: string): Promise<ScrapeRun[]> {
@@ -654,4 +751,12 @@ function proposalSk(proposerId: string, proposalId: string): string {
 
 function responseSk(proposalId: string, responderId: string): string {
   return `PROPOSAL#${proposalId}#RESPONDER#${responderId}`;
+}
+
+function compareStandings(a: Standing, b: Standing): number {
+  const aGames = a.wins + a.losses;
+  const bGames = b.wins + b.losses;
+  const aPct = aGames ? a.wins / aGames : 0;
+  const bPct = bGames ? b.wins / bGames : 0;
+  return b.wins - a.wins || bPct - aPct || a.losses - b.losses || a.displayName.localeCompare(b.displayName);
 }

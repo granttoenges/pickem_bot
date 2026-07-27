@@ -13,6 +13,10 @@ import { Construct } from "constructs";
 import { Secret } from "aws-cdk-lib/aws-secretsmanager";
 import { Effect, PolicyStatement } from "aws-cdk-lib/aws-iam";
 import { LogGroup, RetentionDays } from "aws-cdk-lib/aws-logs";
+import { Alarm, ComparisonOperator, TreatMissingData } from "aws-cdk-lib/aws-cloudwatch";
+import { SnsAction } from "aws-cdk-lib/aws-cloudwatch-actions";
+import { Topic } from "aws-cdk-lib/aws-sns";
+import { EmailSubscription } from "aws-cdk-lib/aws-sns-subscriptions";
 
 export class PickemStack extends Stack {
   constructor(scope: Construct, id: string, props?: StackProps) {
@@ -23,6 +27,7 @@ export class PickemStack extends Stack {
       .split(",")
       .map((origin) => origin.trim())
       .filter(Boolean);
+    const alarmEmail = process.env.ALARM_EMAIL ?? "grantoenges@gmail.com";
 
     const table = new Table(this, "PickemTable", {
       tableName: `${resourcePrefix}-table`,
@@ -157,8 +162,17 @@ export class PickemStack extends Stack {
       }
     });
     grantTableAccess(resultsFunction, table, [
+      "dynamodb:GetItem",
+      "dynamodb:PutItem",
+      "dynamodb:UpdateItem",
+      "dynamodb:Query",
       "dynamodb:Scan"
     ]);
+
+    const alarmTopic = new Topic(this, "OpsAlarmTopic", {
+      topicName: `${resourcePrefix}-ops-alarms`
+    });
+    alarmTopic.addSubscription(new EmailSubscription(alarmEmail));
 
     const authorizer = new HttpUserPoolAuthorizer("PickemAuthorizer", userPool, {
       userPoolClients: [userPoolClient]
@@ -213,6 +227,11 @@ export class PickemStack extends Stack {
       }),
       targets: [new LambdaFunction(resultsFunction)]
     });
+
+    addLambdaErrorAlarm(this, "ApiErrorAlarm", `${resourcePrefix}-api-errors`, apiFunction, alarmTopic);
+    addLambdaErrorAlarm(this, "ScraperErrorAlarm", `${resourcePrefix}-scraper-errors`, scraperFunction, alarmTopic);
+    addLambdaErrorAlarm(this, "ScrapeSchedulerErrorAlarm", `${resourcePrefix}-scrape-scheduler-errors`, scrapeSchedulerFunction, alarmTopic);
+    addLambdaErrorAlarm(this, "ResultsSyncErrorAlarm", `${resourcePrefix}-results-sync-errors`, resultsFunction, alarmTopic);
 
     if (enableAmplify) {
       const githubSecret = Secret.fromSecretNameV2(this, "GithubPatSecret", `${resourcePrefix}-github-pat`);
@@ -288,7 +307,20 @@ function grantTableAccess(fn: NodejsFunction, table: Table, actions: string[]): 
 function lambdaLogGroup(scope: Construct, id: string, functionName: string): LogGroup {
   return new LogGroup(scope, id, {
     logGroupName: `/pickem-bot-v1-run2/lambda/${functionName}-secure`,
-    retention: RetentionDays.ONE_MONTH,
+    retention: RetentionDays.TWO_WEEKS,
     removalPolicy: RemovalPolicy.RETAIN
   });
+}
+
+function addLambdaErrorAlarm(scope: Construct, id: string, alarmName: string, fn: NodejsFunction, topic: Topic): void {
+  const alarm = new Alarm(scope, id, {
+    alarmName,
+    metric: fn.metricErrors({ period: Duration.minutes(5) }),
+    threshold: 1,
+    evaluationPeriods: 1,
+    datapointsToAlarm: 1,
+    comparisonOperator: ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
+    treatMissingData: TreatMissingData.NOT_BREACHING
+  });
+  alarm.addAlarmAction(new SnsAction(topic));
 }
