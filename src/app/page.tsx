@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { AppShell } from "../components/AppShell";
 import { GameOddsBoard } from "../components/GameOddsBoard";
+import { TeamLogo } from "../components/TeamLogo";
 import { apiGet, apiSend, AppLeague, GameWithOptions, LineProposal, PickClaim, PickOption, ProposalResponse, ProposalResponseStance, ProposalSummary, SportLeague, Week, weekQuery } from "../lib/api";
 import { getPreferredLeagueId, persistPreferredLeagueId } from "../lib/leaguePreference";
 
@@ -24,6 +25,8 @@ export default function PlayerBoardPage() {
   const [sportFilter, setSportFilter] = useState<SportFilter>("all");
   const [replaceProposalId, setReplaceProposalId] = useState<string>();
   const [status, setStatus] = useState("Loading leagues...");
+  const [quotaModalMessage, setQuotaModalMessage] = useState("");
+  const quotaModalTimeout = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   const locked = useMemo(() => week ? new Date() >= new Date(week.cutoffAt) : false, [week]);
 
@@ -45,6 +48,25 @@ export default function PlayerBoardPage() {
     }
     void loadWeek(activeLeagueId);
   }, [activeLeagueId]);
+
+  useEffect(() => {
+    return () => {
+      if (quotaModalTimeout.current) {
+        clearTimeout(quotaModalTimeout.current);
+      }
+    };
+  }, []);
+
+  function showQuotaModal(message: string) {
+    if (quotaModalTimeout.current) {
+      clearTimeout(quotaModalTimeout.current);
+    }
+    setQuotaModalMessage(message);
+    quotaModalTimeout.current = setTimeout(() => {
+      setQuotaModalMessage("");
+      quotaModalTimeout.current = undefined;
+    }, 1000);
+  }
 
   async function loadWeek(leagueId = activeLeagueId) {
     try {
@@ -91,7 +113,7 @@ export default function PlayerBoardPage() {
     const sameSportCount = userProposals.filter((proposal) => proposal.sportLeague === option.sportLeague && proposal.proposalId !== replaceProposalId).length;
     const required = option.sportLeague === "NFL" ? week?.nflPickCountRequired : week?.ncaafPickCountRequired;
     if (!replaceProposalId && required !== undefined && sameSportCount >= required) {
-      setStatus(`Your ${option.sportLeague} proposed lines are full. Go to My Picks to change or release a line first.`);
+      showQuotaModal(`Your ${option.sportLeague} proposed lines are full. Go to My Picks to change or release a line first.`);
       return;
     }
     try {
@@ -160,6 +182,13 @@ export default function PlayerBoardPage() {
 
   return (
     <AppShell>
+      {quotaModalMessage ? (
+        <div className="fixed inset-x-0 top-6 z-50 flex justify-center px-4">
+          <div role="alert" aria-live="assertive" className="max-w-md rounded border border-gold/50 bg-white px-4 py-3 text-center text-sm font-semibold text-ink shadow-lg ring-1 ring-ink/5">
+            {quotaModalMessage}
+          </div>
+        </div>
+      ) : null}
       <section className="mx-auto max-w-7xl px-5 py-8 md:px-8">
         <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
           <div>
@@ -240,35 +269,47 @@ export default function PlayerBoardPage() {
           </div>
         ) : tab === "mine" ? (
           <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
-            {filteredUserProposals.map((proposal) => (
-              <article key={proposal.proposalId} className={`rounded border bg-white p-4 ${replaceProposalId === proposal.proposalId ? "border-gold ring-2 ring-gold/30" : "border-ink/10"}`}>
-                <div className="text-xs font-bold text-turf">{proposal.sportLeague}</div>
-                <h2 className="mt-1 font-semibold">{proposal.team}</h2>
-                <p className="text-sm text-ink/60">{formatMarket(proposal)} · {gameLabel(gamesById.get(proposal.gameId))}</p>
-                <p className="mt-2 text-sm font-medium">{proposal.result}</p>
-                <div className="mt-4 flex gap-2">
-                  <button className="rounded bg-ink px-3 py-2 text-sm font-semibold text-white disabled:bg-ink/35" disabled={locked} onClick={() => { setReplaceProposalId(proposal.proposalId); setTab("available"); }}>
-                    Change
-                  </button>
-                  <button className="rounded border border-ink/20 px-3 py-2 text-sm font-semibold disabled:text-ink/35" disabled={locked} onClick={() => releaseProposal(proposal.proposalId)}>
-                    Release
-                  </button>
-                </div>
-              </article>
-            ))}
+            {filteredUserProposals.map((proposal) => {
+              const game = gamesById.get(proposal.gameId);
+              return (
+                <article key={proposal.proposalId} className={`rounded border bg-white p-4 ${replaceProposalId === proposal.proposalId ? "border-gold ring-2 ring-gold/30" : "border-ink/10"}`}>
+                  <div className="flex items-start gap-3">
+                    <ProposalLogo proposal={proposal} game={game} />
+                    <div className="min-w-0">
+                      <div className="text-xs font-bold text-turf">{proposal.sportLeague}</div>
+                      <h2 className="mt-1 font-semibold">{proposal.team}</h2>
+                      <p className="text-sm text-ink/60">{formatMarket(proposal)} · {gameLabel(game)}</p>
+                    </div>
+                  </div>
+                  <p className="mt-2 text-sm font-medium">{proposal.result}</p>
+                  <div className="mt-4 flex gap-2">
+                    <button className="rounded bg-ink px-3 py-2 text-sm font-semibold text-white disabled:bg-ink/35" disabled={locked} onClick={() => { setReplaceProposalId(proposal.proposalId); setTab("available"); }}>
+                      Change
+                    </button>
+                    <button className="rounded border border-ink/20 px-3 py-2 text-sm font-semibold disabled:text-ink/35" disabled={locked} onClick={() => releaseProposal(proposal.proposalId)}>
+                      Release
+                    </button>
+                  </div>
+                </article>
+              );
+            })}
             {!filteredUserProposals.length ? <div className="rounded border border-ink/10 bg-white p-6 text-ink/60">{pickMode === "admin_selected" ? `This league uses admin-selected lines, so you do not need to propose your own ${emptySportLabel}lines.` : `You have not proposed any ${emptySportLabel}lines yet.`}</div> : null}
           </div>
         ) : (
           <div className="grid gap-3 md:grid-cols-2">
             {filteredOtherProposals.map((proposal) => {
               const response = userResponseByProposal.get(proposal.proposalId);
+              const game = gamesById.get(proposal.gameId);
               return (
                 <article key={proposal.proposalId} className="rounded border border-ink/15 bg-white p-4 shadow-sm ring-1 ring-ink/5">
                   <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div>
-                      <div className="text-xs font-bold uppercase tracking-wide text-turf">{proposal.sportLeague} · proposed by {proposal.proposerLabel ?? "member"}</div>
-                      <h2 className="mt-1 text-lg font-semibold">{proposal.label}</h2>
-                      <p className="text-sm text-ink/60">{formatMarket(proposal)} · {gameLabel(gamesById.get(proposal.gameId))}</p>
+                    <div className="flex min-w-0 items-start gap-3">
+                      <ProposalLogo proposal={proposal} game={game} />
+                      <div className="min-w-0">
+                        <div className="text-xs font-bold uppercase tracking-wide text-turf">{proposal.sportLeague} · proposed by {proposal.proposerLabel ?? "member"}</div>
+                        <h2 className="mt-1 text-lg font-semibold">{proposal.label}</h2>
+                        <p className="text-sm text-ink/60">{formatMarket(proposal)} · {gameLabel(game)}</p>
+                      </div>
                     </div>
                     {response ? <span className="rounded bg-gold/25 px-3 py-1 text-xs font-bold uppercase text-ink">{response.stance}</span> : null}
                   </div>
@@ -346,6 +387,24 @@ function formatMarket(proposal: LineProposal): string {
     return `Game total ${proposal.side} ${proposal.lineValue}`;
   }
   return `Team total ${proposal.side} ${proposal.lineValue}`;
+}
+
+function ProposalLogo({ proposal, game }: { proposal: LineProposal; game?: GameWithOptions }) {
+  if (proposal.market === "game_total" && game) {
+    return (
+      <div className="flex shrink-0 items-center gap-1.5" aria-label={`${game.awayTeam} versus ${game.homeTeam}`}>
+        <TeamLogo teamName={game.awayTeam} size="sm" />
+        <span className="text-[10px] font-bold uppercase text-ink/40">vs</span>
+        <TeamLogo teamName={game.homeTeam} size="sm" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex shrink-0 items-center">
+      <TeamLogo teamName={proposal.team} size="sm" />
+    </div>
+  );
 }
 
 function gameLabel(game?: GameWithOptions): string {
