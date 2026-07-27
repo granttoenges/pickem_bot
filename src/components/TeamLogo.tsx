@@ -31,7 +31,7 @@ export function TeamLogo({ teamName, size = "md", tone = "light" }: { teamName: 
   const textSize = size === "sm" ? "text-[10px]" : "text-xs";
   const fallbackTone = tone === "dark"
     ? "border-white/15 bg-white/10 text-white/70"
-    : "border-ink/10 bg-ink/5 text-ink/60";
+    : "border-ink/10 bg-ink/5 text-ink/60 dark:border-white/15 dark:bg-white/10 dark:text-zinc-300";
 
   if (!src) {
     return (

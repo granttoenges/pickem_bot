@@ -68,6 +68,7 @@ UI notes:
 
 - Player board has a league switcher and sport filter: `All`, `NFL`, `NCAA`.
 - Game cards use a full-width sportsbook-style layout with team logos.
+- Dark mode follows system preference by default and can be set to `System`, `Light`, or `Dark` from the header; the preference is stored in browser `localStorage`.
 - Login stores Cognito tokens in `sessionStorage`, not `localStorage`.
 - New-password setup shows the current password policy before submit.
 

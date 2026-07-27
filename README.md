@@ -11,6 +11,7 @@ The app is built to run locally and deploy cheaply on AWS with serverless servic
 - Multiple app leagues, each with independent members, settings, picks, responses, and standings.
 - Player board with `Available Games`, `My Picks`, and `League Picks` tabs.
 - Sport filter for `All`, `NFL`, and `NCAA`.
+- Site-wide dark mode that follows system preference by default and can be overridden from the header.
 - Member-proposed mode:
   - admins set weekly NFL and NCAAF proposal limits separately.
   - members propose spread, team total, or game total lines.

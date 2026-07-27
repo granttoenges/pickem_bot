@@ -43,7 +43,7 @@ export default function StandingsPage() {
           <h1 className="text-4xl font-semibold">Season Standings</h1>
           {leagues.length > 1 ? (
             <select
-              className="rounded border border-ink/20 bg-white px-3 py-2"
+              className="rounded border border-ink/20 bg-white px-3 py-2 dark:border-white/15 dark:bg-zinc-900 dark:text-zinc-100"
               value={activeLeagueId}
               onChange={(event) => {
                 setActiveLeagueId(event.target.value);
@@ -54,10 +54,10 @@ export default function StandingsPage() {
             </select>
           ) : null}
         </div>
-        {status ? <div className="mt-4 rounded border border-ink/10 bg-white p-3 text-sm">{status}</div> : null}
-        <div className="mt-6 overflow-hidden rounded border border-ink/10 bg-white">
+        {status ? <div className="mt-4 rounded border border-ink/10 bg-white p-3 text-sm dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-200">{status}</div> : null}
+        <div className="mt-6 overflow-hidden rounded border border-ink/10 bg-white dark:border-white/10 dark:bg-zinc-900">
           {standings.map((row, index) => (
-            <div key={row.userId} className="grid grid-cols-[48px_1fr_90px_90px_90px] border-b border-ink/10 px-4 py-3 last:border-b-0">
+            <div key={row.userId} className="grid grid-cols-[48px_1fr_90px_90px_90px] border-b border-ink/10 px-4 py-3 last:border-b-0 dark:border-white/10">
               <span className="font-semibold">{index + 1}</span>
               <span>{row.displayName}</span>
               <span>{row.wins} W</span>
@@ -65,7 +65,7 @@ export default function StandingsPage() {
               <span>{row.pushes} P</span>
             </div>
           ))}
-          {!standings.length && !status ? <div className="p-6 text-ink/60">Standings will appear after picks are graded.</div> : null}
+          {!standings.length && !status ? <div className="p-6 text-ink/60 dark:text-zinc-400">Standings will appear after picks are graded.</div> : null}
         </div>
       </section>
     </AppShell>

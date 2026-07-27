@@ -47,22 +47,22 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="grid min-h-screen place-items-center bg-ink px-5 text-chalk">
-      <form className="w-full max-w-sm rounded border border-white/15 bg-white/10 p-6" onSubmit={needsNewPassword ? submitNewPassword : submit}>
+    <main className="grid min-h-screen place-items-center bg-ink px-5 text-chalk dark:bg-zinc-950">
+      <form className="w-full max-w-sm rounded border border-white/15 bg-white/10 p-6 shadow-xl dark:bg-zinc-900/80" onSubmit={needsNewPassword ? submitNewPassword : submit}>
         <h1 className="text-3xl font-semibold">Pickem Bot</h1>
         <p className="mt-2 text-sm text-chalk/65">Invite-only league login.</p>
         {!needsNewPassword ? (
           <>
             <label className="mt-6 block text-sm font-semibold" htmlFor="email">Email</label>
-            <input id="email" className="mt-2 w-full rounded border border-white/20 bg-white px-3 py-2 text-ink" value={email} onChange={(event) => setEmail(event.target.value)} />
+            <input id="email" className="mt-2 w-full rounded border border-white/20 bg-white px-3 py-2 text-ink dark:border-white/15 dark:bg-zinc-950 dark:text-zinc-100" value={email} onChange={(event) => setEmail(event.target.value)} />
             <label className="mt-4 block text-sm font-semibold" htmlFor="password">Password</label>
-            <input id="password" type="password" className="mt-2 w-full rounded border border-white/20 bg-white px-3 py-2 text-ink" value={password} onChange={(event) => setPassword(event.target.value)} />
+            <input id="password" type="password" className="mt-2 w-full rounded border border-white/20 bg-white px-3 py-2 text-ink dark:border-white/15 dark:bg-zinc-950 dark:text-zinc-100" value={password} onChange={(event) => setPassword(event.target.value)} />
             <button className="mt-6 w-full rounded bg-gold px-4 py-2 font-semibold text-ink">Sign in</button>
           </>
         ) : (
           <>
             <label className="mt-6 block text-sm font-semibold" htmlFor="newPassword">New password</label>
-            <input id="newPassword" type="password" className="mt-2 w-full rounded border border-white/20 bg-white px-3 py-2 text-ink" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} />
+            <input id="newPassword" type="password" className="mt-2 w-full rounded border border-white/20 bg-white px-3 py-2 text-ink dark:border-white/15 dark:bg-zinc-950 dark:text-zinc-100" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} />
             <div className="mt-3 rounded border border-white/15 bg-white/5 p-3 text-xs text-chalk/75">
               <p className="font-semibold text-chalk">Password requirements</p>
               <ul className="mt-2 space-y-1">

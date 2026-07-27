@@ -29,23 +29,23 @@ export function GameOddsBoard({
   const gameUnder = findOption(game, "game-total-under");
 
   return (
-    <article className="w-full overflow-hidden rounded-md border border-ink/15 bg-white text-ink shadow-md ring-1 ring-ink/5">
-      <header className="border-b border-ink/15 bg-field px-3 py-3 sm:px-4 sm:py-4">
+    <article className="w-full overflow-hidden rounded-md border border-ink/15 bg-white text-ink shadow-md ring-1 ring-ink/5 dark:border-white/15 dark:bg-zinc-900 dark:text-zinc-100 dark:ring-white/5">
+      <header className="border-b border-ink/15 bg-field px-3 py-3 sm:px-4 sm:py-4 dark:border-white/15 dark:bg-zinc-800/70">
         <div className="flex items-center justify-between gap-3">
-          <span className="rounded bg-ink px-3 py-1 text-xs font-extrabold tracking-wide text-white">{game.sportLeague}</span>
-          <span className="text-xs font-semibold text-ink/50">{new Date(game.kickoffAt).toLocaleString()}</span>
+          <span className="rounded bg-ink px-3 py-1 text-xs font-extrabold tracking-wide text-white dark:bg-gold dark:text-ink">{game.sportLeague}</span>
+          <span className="text-xs font-semibold text-ink/50 dark:text-zinc-400">{new Date(game.kickoffAt).toLocaleString()}</span>
         </div>
         <div className="mt-3 grid grid-cols-[1fr_36px_1fr] items-center gap-2 text-center sm:mt-4 sm:grid-cols-[1fr_42px_1fr] sm:gap-3">
           <TeamHeader teamName={game.awayTeam} />
-          <span className="mx-auto rounded-full bg-ink/5 px-2 py-1 text-[10px] font-bold uppercase text-ink/50">at</span>
+          <span className="mx-auto rounded-full bg-ink/5 px-2 py-1 text-[10px] font-bold uppercase text-ink/50 dark:bg-white/10 dark:text-zinc-400">at</span>
           <TeamHeader teamName={game.homeTeam} />
         </div>
-        {game.adminNote ? <p className="mt-3 text-center text-xs text-ink/55">{game.adminNote}</p> : null}
+        {game.adminNote ? <p className="mt-3 text-center text-xs text-ink/55 dark:text-zinc-400">{game.adminNote}</p> : null}
       </header>
 
       <div>
         <div>
-          <div className="grid grid-cols-[minmax(74px,1fr)_minmax(50px,64px)_minmax(50px,64px)_minmax(50px,64px)_minmax(54px,70px)] border-b border-ink/15 bg-ink/5 text-[9px] font-extrabold uppercase tracking-wide text-ink/55 sm:grid-cols-[minmax(220px,1fr)_minmax(132px,180px)_minmax(90px,120px)_minmax(90px,120px)_minmax(132px,180px)] sm:text-[11px]">
+          <div className="grid grid-cols-[minmax(74px,1fr)_minmax(50px,64px)_minmax(50px,64px)_minmax(50px,64px)_minmax(54px,70px)] border-b border-ink/15 bg-ink/5 text-[9px] font-extrabold uppercase tracking-wide text-ink/55 sm:grid-cols-[minmax(220px,1fr)_minmax(132px,180px)_minmax(90px,120px)_minmax(90px,120px)_minmax(132px,180px)] sm:text-[11px] dark:border-white/15 dark:bg-white/5 dark:text-zinc-400">
             <span className="px-2 py-2 sm:px-3 sm:py-3">Game</span>
             <span className="px-1 py-2 text-center sm:px-3 sm:py-3">Spread</span>
             <span className="col-span-2 px-1 py-2 text-center sm:px-3 sm:py-3">Team Total</span>
@@ -85,7 +85,7 @@ function TeamHeader({ teamName }: { teamName: string }) {
   return (
     <div className="flex min-w-0 flex-col items-center gap-2">
       <TeamLogo teamName={teamName} size="sm" />
-      <span className="max-w-full truncate text-[10px] font-extrabold uppercase tracking-wide text-ink/70 sm:text-[11px]">{teamName}</span>
+      <span className="max-w-full truncate text-[10px] font-extrabold uppercase tracking-wide text-ink/70 sm:text-[11px] dark:text-zinc-300">{teamName}</span>
     </div>
   );
 }
@@ -114,10 +114,10 @@ function TeamMarketRow({
   onPick?: (option: PickOption) => void;
 }) {
   return (
-    <div className="grid min-h-[58px] grid-cols-[minmax(74px,1fr)_minmax(50px,64px)_minmax(50px,64px)_minmax(50px,64px)_minmax(54px,70px)] items-stretch border-b border-ink/15 last:border-b-0 sm:min-h-[72px] sm:grid-cols-[minmax(220px,1fr)_minmax(132px,180px)_minmax(90px,120px)_minmax(90px,120px)_minmax(132px,180px)]">
-      <div className="flex min-w-0 items-center gap-1 px-1.5 py-2 sm:gap-3 sm:px-3 sm:py-3">
+    <div className="grid min-h-[58px] grid-cols-[minmax(74px,1fr)_minmax(50px,64px)_minmax(50px,64px)_minmax(50px,64px)_minmax(54px,70px)] items-stretch border-b border-ink/15 last:border-b-0 sm:min-h-[72px] sm:grid-cols-[minmax(220px,1fr)_minmax(132px,180px)_minmax(90px,120px)_minmax(90px,120px)_minmax(132px,180px)] dark:border-white/10">
+      <div className="flex min-w-0 items-center gap-1 px-1.5 py-2 sm:gap-3 sm:px-3 sm:py-3 dark:bg-zinc-900">
         <TeamLogo teamName={teamName} size="sm" />
-        <span className="min-w-0 truncate text-[11px] font-bold text-ink sm:text-sm">{teamName}</span>
+        <span className="min-w-0 truncate text-[11px] font-bold text-ink sm:text-sm dark:text-zinc-100">{teamName}</span>
       </div>
       <OptionCell option={spread} claimByOption={claimByOption} userOptionIds={userOptionIds} locked={locked} mode={mode} onPick={onPick} />
       <OptionCell option={over} claimByOption={claimByOption} userOptionIds={userOptionIds} locked={locked} mode={mode} onPick={onPick} compact />
@@ -146,7 +146,7 @@ function OptionCell({
 }) {
   if (!option) {
     return (
-      <div className="flex items-center justify-center border-l border-ink/15 bg-ink/5 px-1 text-sm font-bold text-ink/30 sm:px-2">
+      <div className="flex items-center justify-center border-l border-ink/15 bg-ink/5 px-1 text-sm font-bold text-ink/30 sm:px-2 dark:border-white/10 dark:bg-white/5 dark:text-zinc-600">
         --
       </div>
     );
@@ -161,7 +161,7 @@ function OptionCell({
 
   return (
     <button
-      className={`flex min-h-[58px] flex-col items-center justify-center gap-1 border-l border-ink/15 px-1 text-center transition sm:min-h-[70px] sm:px-2 ${cellClass(mine, disabled, mode)}`}
+      className={`flex min-h-[58px] flex-col items-center justify-center gap-1 border-l border-ink/15 px-1 text-center transition sm:min-h-[70px] sm:px-2 dark:border-white/10 ${cellClass(mine, disabled, mode)}`}
       disabled={disabled}
       type="button"
       onClick={() => onPick?.(option)}
@@ -178,15 +178,15 @@ function findOption(game: GameWithOptions, suffix: string): PickOption | undefin
 
 function cellClass(mine: boolean, disabled: boolean, mode: Mode): string {
   if (mine) {
-    return "bg-gold/20 text-ink ring-2 ring-inset ring-gold/50";
+    return "bg-gold/20 text-ink ring-2 ring-inset ring-gold/50 dark:bg-gold/25 dark:text-zinc-50";
   }
   if (disabled && mode !== "summary") {
-    return "cursor-not-allowed bg-ink/5 text-ink/30";
+    return "cursor-not-allowed bg-ink/5 text-ink/30 dark:bg-white/5 dark:text-zinc-600";
   }
   if (mode === "summary") {
-    return "bg-white text-ink/60";
+    return "bg-white text-ink/60 dark:bg-zinc-900 dark:text-zinc-400";
   }
-  return "bg-white text-turf hover:bg-turf/5 active:bg-turf/10";
+  return "bg-white text-turf hover:bg-turf/5 active:bg-turf/10 dark:bg-zinc-900 dark:text-emerald-300 dark:hover:bg-emerald-400/10 dark:active:bg-emerald-400/15";
 }
 
 function actionLabel({ mine, claim, mode }: { mine: boolean; claim: boolean; mode: Mode }): string {

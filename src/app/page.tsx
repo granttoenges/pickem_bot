@@ -184,7 +184,7 @@ export default function PlayerBoardPage() {
     <AppShell>
       {quotaModalMessage ? (
         <div className="fixed inset-x-0 top-6 z-50 flex justify-center px-4">
-          <div role="alert" aria-live="assertive" className="max-w-md rounded border border-gold/50 bg-white px-4 py-3 text-center text-sm font-semibold text-ink shadow-lg ring-1 ring-ink/5">
+          <div role="alert" aria-live="assertive" className="max-w-md rounded border border-gold/50 bg-white px-4 py-3 text-center text-sm font-semibold text-ink shadow-lg ring-1 ring-ink/5 dark:bg-zinc-900 dark:text-zinc-100 dark:ring-white/10">
             {quotaModalMessage}
           </div>
         </div>
@@ -194,12 +194,12 @@ export default function PlayerBoardPage() {
           <div>
             <p className="text-sm font-semibold uppercase tracking-[0.2em] text-turf">Player Portal</p>
             <h1 className="text-4xl font-semibold">Weekly Proposed Lines</h1>
-            <p className="mt-2 text-ink/65">{week ? `${week.label} locks ${new Date(week.cutoffAt).toLocaleString()}` : "Propose lines and respond to league picks."}</p>
+            <p className="mt-2 text-ink/65 dark:text-zinc-400">{week ? `${week.label} locks ${new Date(week.cutoffAt).toLocaleString()}` : "Propose lines and respond to league picks."}</p>
           </div>
           <div className="flex flex-wrap items-center gap-3">
             {leagues.length > 1 ? (
               <select
-                className="rounded border border-ink/20 bg-white px-3 py-2"
+                className="rounded border border-ink/20 bg-white px-3 py-2 dark:border-white/15 dark:bg-zinc-900 dark:text-zinc-100"
                 value={activeLeagueId}
                 onChange={(event) => {
                   setActiveLeagueId(event.target.value);
@@ -219,14 +219,14 @@ export default function PlayerBoardPage() {
           <div className="mb-4 grid gap-3 md:grid-cols-3">
             <Quota label="NFL" submitted={summary.NFL.submitted} required={summary.NFL.required} />
             <Quota label="CFB" submitted={summary.NCAAF.submitted} required={summary.NCAAF.required} />
-            <div className={`rounded border p-4 ${summary.complete ? "border-turf bg-turf/10" : "border-ink/10 bg-white"}`}>
-              <div className="text-sm font-semibold text-ink/60">Card Status</div>
+            <div className={`rounded border p-4 ${summary.complete ? "border-turf bg-turf/10 dark:border-emerald-400/50 dark:bg-emerald-400/10" : "border-ink/10 bg-white dark:border-white/10 dark:bg-zinc-900"}`}>
+              <div className="text-sm font-semibold text-ink/60 dark:text-zinc-400">Card Status</div>
               <div className="mt-1 text-xl font-semibold">{summary.complete ? "Complete" : "Incomplete"}</div>
             </div>
           </div>
         ) : null}
 
-        {status ? <div className="mb-4 rounded border border-ink/10 bg-white p-3 text-sm">{status}</div> : null}
+        {status ? <div className="mb-4 rounded border border-ink/10 bg-white p-3 text-sm dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-200">{status}</div> : null}
 
         <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
           <div className="flex gap-2">
@@ -234,7 +234,7 @@ export default function PlayerBoardPage() {
             <button className={tabClass(tab === "mine")} onClick={() => setTab("mine")}>My Picks</button>
             <button className={tabClass(tab === "league")} onClick={() => setTab("league")}>League Picks</button>
           </div>
-          <div className="flex rounded border border-ink/15 bg-white p-1 shadow-sm">
+          <div className="flex rounded border border-ink/15 bg-white p-1 shadow-sm dark:border-white/15 dark:bg-zinc-900">
             {(["all", "NFL", "NCAAF"] as SportFilter[]).map((filter) => (
               <button
                 key={filter}
@@ -250,7 +250,7 @@ export default function PlayerBoardPage() {
         {tab === "available" ? (
           <div className="space-y-3">
             {pickMode === "admin_selected" ? (
-              <div className="rounded border border-ink/10 bg-white p-3 text-sm text-ink/70">
+              <div className="rounded border border-ink/10 bg-white p-3 text-sm text-ink/70 dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-300">
                 This league uses admin-selected lines. Review available games here, then use League Picks to choose with or against.
               </div>
             ) : null}
@@ -265,35 +265,35 @@ export default function PlayerBoardPage() {
                 onPick={pickMode === "admin_selected" ? undefined : proposeOption}
               />
             ))}
-            {!filteredGames.length && !status ? <div className="rounded border border-ink/10 bg-white p-6">No {emptySportLabel}games are available for this league week yet.</div> : null}
+            {!filteredGames.length && !status ? <div className="rounded border border-ink/10 bg-white p-6 dark:border-white/10 dark:bg-zinc-900">No {emptySportLabel}games are available for this league week yet.</div> : null}
           </div>
         ) : tab === "mine" ? (
           <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
             {filteredUserProposals.map((proposal) => {
               const game = gamesById.get(proposal.gameId);
               return (
-                <article key={proposal.proposalId} className={`rounded border bg-white p-4 ${replaceProposalId === proposal.proposalId ? "border-gold ring-2 ring-gold/30" : "border-ink/10"}`}>
+                <article key={proposal.proposalId} className={`rounded border bg-white p-4 dark:bg-zinc-900 ${replaceProposalId === proposal.proposalId ? "border-gold ring-2 ring-gold/30 dark:ring-gold/40" : "border-ink/10 dark:border-white/10"}`}>
                   <div className="flex items-start gap-3">
                     <ProposalLogo proposal={proposal} game={game} />
                     <div className="min-w-0">
                       <div className="text-xs font-bold text-turf">{proposal.sportLeague}</div>
                       <h2 className="mt-1 font-semibold">{proposal.team}</h2>
-                      <p className="text-sm text-ink/60">{formatMarket(proposal)} · {gameLabel(game)}</p>
+                      <p className="text-sm text-ink/60 dark:text-zinc-400">{formatMarket(proposal)} · {gameLabel(game)}</p>
                     </div>
                   </div>
                   <p className="mt-2 text-sm font-medium">{proposal.result}</p>
                   <div className="mt-4 flex gap-2">
-                    <button className="rounded bg-ink px-3 py-2 text-sm font-semibold text-white disabled:bg-ink/35" disabled={locked} onClick={() => { setReplaceProposalId(proposal.proposalId); setTab("available"); }}>
+                    <button className="rounded bg-ink px-3 py-2 text-sm font-semibold text-white disabled:bg-ink/35 dark:bg-zinc-100 dark:text-zinc-950 dark:disabled:bg-white/20 dark:disabled:text-zinc-500" disabled={locked} onClick={() => { setReplaceProposalId(proposal.proposalId); setTab("available"); }}>
                       Change
                     </button>
-                    <button className="rounded border border-ink/20 px-3 py-2 text-sm font-semibold disabled:text-ink/35" disabled={locked} onClick={() => releaseProposal(proposal.proposalId)}>
+                    <button className="rounded border border-ink/20 px-3 py-2 text-sm font-semibold disabled:text-ink/35 dark:border-white/15 dark:disabled:text-zinc-600" disabled={locked} onClick={() => releaseProposal(proposal.proposalId)}>
                       Release
                     </button>
                   </div>
                 </article>
               );
             })}
-            {!filteredUserProposals.length ? <div className="rounded border border-ink/10 bg-white p-6 text-ink/60">{pickMode === "admin_selected" ? `This league uses admin-selected lines, so you do not need to propose your own ${emptySportLabel}lines.` : `You have not proposed any ${emptySportLabel}lines yet.`}</div> : null}
+            {!filteredUserProposals.length ? <div className="rounded border border-ink/10 bg-white p-6 text-ink/60 dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-400">{pickMode === "admin_selected" ? `This league uses admin-selected lines, so you do not need to propose your own ${emptySportLabel}lines.` : `You have not proposed any ${emptySportLabel}lines yet.`}</div> : null}
           </div>
         ) : (
           <div className="grid gap-3 md:grid-cols-2">
@@ -301,28 +301,28 @@ export default function PlayerBoardPage() {
               const response = userResponseByProposal.get(proposal.proposalId);
               const game = gamesById.get(proposal.gameId);
               return (
-                <article key={proposal.proposalId} className="rounded border border-ink/15 bg-white p-4 shadow-sm ring-1 ring-ink/5">
+                <article key={proposal.proposalId} className="rounded border border-ink/15 bg-white p-4 shadow-sm ring-1 ring-ink/5 dark:border-white/15 dark:bg-zinc-900 dark:ring-white/5">
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div className="flex min-w-0 items-start gap-3">
                       <ProposalLogo proposal={proposal} game={game} />
                       <div className="min-w-0">
                         <div className="text-xs font-bold uppercase tracking-wide text-turf">{proposal.sportLeague} · proposed by {proposal.proposerLabel ?? "member"}</div>
                         <h2 className="mt-1 text-lg font-semibold">{proposal.label}</h2>
-                        <p className="text-sm text-ink/60">{formatMarket(proposal)} · {gameLabel(game)}</p>
+                        <p className="text-sm text-ink/60 dark:text-zinc-400">{formatMarket(proposal)} · {gameLabel(game)}</p>
                       </div>
                     </div>
-                    {response ? <span className="rounded bg-gold/25 px-3 py-1 text-xs font-bold uppercase text-ink">{response.stance}</span> : null}
+                    {response ? <span className="rounded bg-gold/25 px-3 py-1 text-xs font-bold uppercase text-ink dark:text-zinc-100">{response.stance}</span> : null}
                   </div>
                   <div className="mt-4 flex gap-2">
                     <button
-                      className={`rounded px-4 py-2 text-sm font-semibold disabled:bg-ink/20 disabled:text-ink/40 ${response?.stance === "with" ? "bg-gold text-ink" : "border border-ink/20 bg-white text-ink"}`}
+                      className={`rounded px-4 py-2 text-sm font-semibold disabled:bg-ink/20 disabled:text-ink/40 dark:disabled:bg-white/10 dark:disabled:text-zinc-600 ${response?.stance === "with" ? "bg-gold text-ink" : "border border-ink/20 bg-white text-ink dark:border-white/15 dark:bg-zinc-900 dark:text-zinc-100"}`}
                       disabled={locked}
                       onClick={() => respondToProposal(proposal, "with")}
                     >
                       With
                     </button>
                     <button
-                      className={`rounded px-4 py-2 text-sm font-semibold disabled:bg-ink/20 disabled:text-ink/40 ${response?.stance === "against" ? "bg-gold text-ink" : "border border-ink/20 bg-white text-ink"}`}
+                      className={`rounded px-4 py-2 text-sm font-semibold disabled:bg-ink/20 disabled:text-ink/40 dark:disabled:bg-white/10 dark:disabled:text-zinc-600 ${response?.stance === "against" ? "bg-gold text-ink" : "border border-ink/20 bg-white text-ink dark:border-white/15 dark:bg-zinc-900 dark:text-zinc-100"}`}
                       disabled={locked}
                       onClick={() => respondToProposal(proposal, "against")}
                     >
@@ -332,7 +332,7 @@ export default function PlayerBoardPage() {
                 </article>
               );
             })}
-            {!filteredOtherProposals.length ? <div className="rounded border border-ink/10 bg-white p-6 text-ink/60">No {emptySportLabel}league picks are available yet.</div> : null}
+            {!filteredOtherProposals.length ? <div className="rounded border border-ink/10 bg-white p-6 text-ink/60 dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-400">No {emptySportLabel}league picks are available yet.</div> : null}
           </div>
         )}
       </section>
@@ -343,19 +343,19 @@ export default function PlayerBoardPage() {
 function Quota({ label, submitted, required }: { label: string; submitted: number; required: number }) {
   const complete = submitted === required;
   return (
-    <div className={`rounded border p-4 ${complete ? "border-turf bg-turf/10" : "border-ink/10 bg-white"}`}>
-      <div className="text-sm font-semibold text-ink/60">{label} Lines</div>
+    <div className={`rounded border p-4 ${complete ? "border-turf bg-turf/10 dark:border-emerald-400/50 dark:bg-emerald-400/10" : "border-ink/10 bg-white dark:border-white/10 dark:bg-zinc-900"}`}>
+      <div className="text-sm font-semibold text-ink/60 dark:text-zinc-400">{label} Lines</div>
       <div className="mt-1 text-xl font-semibold">{submitted} / {required}</div>
     </div>
   );
 }
 
 function tabClass(active: boolean): string {
-  return `rounded px-4 py-2 text-sm font-semibold ${active ? "bg-ink text-white" : "border border-ink/15 bg-white text-ink"}`;
+  return `rounded px-4 py-2 text-sm font-semibold ${active ? "bg-ink text-white dark:bg-zinc-100 dark:text-zinc-950" : "border border-ink/15 bg-white text-ink dark:border-white/15 dark:bg-zinc-900 dark:text-zinc-100"}`;
 }
 
 function sportFilterClass(active: boolean): string {
-  return `rounded px-3 py-1.5 text-sm font-semibold transition ${active ? "bg-ink text-white" : "text-ink/65 hover:bg-ink/5 hover:text-ink"}`;
+  return `rounded px-3 py-1.5 text-sm font-semibold transition ${active ? "bg-ink text-white dark:bg-zinc-100 dark:text-zinc-950" : "text-ink/65 hover:bg-ink/5 hover:text-ink dark:text-zinc-400 dark:hover:bg-white/10 dark:hover:text-zinc-100"}`;
 }
 
 function sportFilterLabel(filter: SportFilter): string {
@@ -394,7 +394,7 @@ function ProposalLogo({ proposal, game }: { proposal: LineProposal; game?: GameW
     return (
       <div className="flex shrink-0 items-center gap-1.5" aria-label={`${game.awayTeam} versus ${game.homeTeam}`}>
         <TeamLogo teamName={game.awayTeam} size="sm" />
-        <span className="text-[10px] font-bold uppercase text-ink/40">vs</span>
+        <span className="text-[10px] font-bold uppercase text-ink/40 dark:text-zinc-500">vs</span>
         <TeamLogo teamName={game.homeTeam} size="sm" />
       </div>
     );

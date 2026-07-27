@@ -3,7 +3,7 @@ import type { GameWithOptions, Market } from "../lib/api";
 export function LineText({ game, market }: { game: GameWithOptions; market: Market }) {
   const line = game.lines.find((item) => item.market === market);
   if (!line) {
-    return <span className="text-ink/50">No {market} line</span>;
+    return <span className="text-ink/50 dark:text-zinc-500">No {market} line</span>;
   }
   if (market === "spread") {
     return (

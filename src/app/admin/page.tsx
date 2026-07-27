@@ -239,28 +239,28 @@ export default function AdminPage() {
           <div>
             <p className="text-sm font-semibold uppercase tracking-[0.2em] text-turf">Admin Portal</p>
             <h1 className="text-4xl font-semibold">League Control</h1>
-            <p className="mt-2 text-ink/65">{week ? `${week.label} · DraftKings ${formatDateTime(week.scrapeAt)} · Picks close ${formatDateTime(week.cutoffAt)}` : "Manage league settings, invites, and weekly proposed lines."}</p>
+            <p className="mt-2 text-ink/65 dark:text-zinc-400">{week ? `${week.label} · DraftKings ${formatDateTime(week.scrapeAt)} · Picks close ${formatDateTime(week.cutoffAt)}` : "Manage league settings, invites, and weekly proposed lines."}</p>
           </div>
-          <div className="rounded border border-ink/10 bg-white p-4">
+          <div className="rounded border border-ink/10 bg-white p-4 dark:border-white/10 dark:bg-zinc-900">
             <h2 className="mb-2 font-semibold">Scraper Status</h2>
-            {week ? <div className="mb-2 text-sm text-ink/70">Configured status: <strong>{week.scrapeStatus ?? "pending"}</strong></div> : null}
+            {week ? <div className="mb-2 text-sm text-ink/70 dark:text-zinc-300">Configured status: <strong>{week.scrapeStatus ?? "pending"}</strong></div> : null}
             {scrapeRuns[0] ? (
-              <div className="text-sm text-ink/70">
+              <div className="text-sm text-ink/70 dark:text-zinc-300">
                 <div>Status: <strong>{scrapeRuns[0].status}</strong></div>
                 <div>Games parsed: <strong>{scrapeRuns[0].parsedGameCount}</strong></div>
                 <div>Captured: {new Date(scrapeRuns[0].capturedAt).toLocaleString()}</div>
               </div>
-            ) : <p className="text-sm text-ink/60">No scrape runs stored yet.</p>}
+            ) : <p className="text-sm text-ink/60 dark:text-zinc-400">No scrape runs stored yet.</p>}
           </div>
         </div>
 
-        {status ? <div className="mb-4 rounded border border-ink/10 bg-white p-3 text-sm">{status}</div> : null}
+        {status ? <div className="mb-4 rounded border border-ink/10 bg-white p-3 text-sm dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-200">{status}</div> : null}
 
         <div className="mb-6 grid gap-4 lg:grid-cols-3">
-          <div className="rounded border border-ink/10 bg-white p-4">
+          <div className="rounded border border-ink/10 bg-white p-4 dark:border-white/10 dark:bg-zinc-900">
             <h2 className="mb-3 font-semibold">Active League</h2>
             <select
-              className="w-full rounded border border-ink/20 bg-white px-3 py-2"
+              className="w-full rounded border border-ink/20 bg-white px-3 py-2 dark:border-white/15 dark:bg-zinc-950 dark:text-zinc-100"
               value={activeLeagueId}
               onChange={(event) => {
                 setActiveLeagueId(event.target.value);
@@ -270,29 +270,29 @@ export default function AdminPage() {
               {leagues.map((league) => <option key={league.leagueId} value={league.leagueId}>{league.name}</option>)}
             </select>
           </div>
-          <div className="rounded border border-ink/10 bg-white p-4">
+          <div className="rounded border border-ink/10 bg-white p-4 dark:border-white/10 dark:bg-zinc-900">
             <h2 className="mb-3 font-semibold">League Actions</h2>
-            <button className="rounded bg-ink px-4 py-2 text-sm font-semibold text-white" onClick={() => setShowCreateLeague(true)}>
+            <button className="rounded bg-ink px-4 py-2 text-sm font-semibold text-white dark:bg-zinc-100 dark:text-zinc-950" onClick={() => setShowCreateLeague(true)}>
               Create League
             </button>
           </div>
-          <form className="rounded border border-ink/10 bg-white p-4" onSubmit={invitePlayer}>
+          <form className="rounded border border-ink/10 bg-white p-4 dark:border-white/10 dark:bg-zinc-900" onSubmit={invitePlayer}>
             <h2 className="mb-3 font-semibold">Invite Player</h2>
             <div className="flex gap-2">
-              <input className="min-w-0 flex-1 rounded border border-ink/20 px-3 py-2 text-sm" type="email" value={inviteEmail} onChange={(event) => setInviteEmail(event.target.value)} placeholder="friend@example.com" />
+              <input className="min-w-0 flex-1 rounded border border-ink/20 px-3 py-2 text-sm dark:border-white/15 dark:bg-zinc-950 dark:text-zinc-100" type="email" value={inviteEmail} onChange={(event) => setInviteEmail(event.target.value)} placeholder="friend@example.com" />
               <button className="rounded bg-turf px-4 py-2 text-sm font-semibold text-white">Invite</button>
             </div>
           </form>
         </div>
 
         {week ? (
-          <form className="mb-6 rounded border border-ink/10 bg-white p-4" onSubmit={saveSettings}>
+          <form className="mb-6 rounded border border-ink/10 bg-white p-4 dark:border-white/10 dark:bg-zinc-900" onSubmit={saveSettings}>
             <h2 className="mb-3 text-xl font-semibold">Weekly Settings</h2>
             <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-[220px_160px_160px_240px_240px_auto] lg:items-end">
               <label className="text-sm font-semibold">
                 League pick mode
                 <select
-                  className="mt-1 w-full rounded border border-ink/20 bg-white px-3 py-2"
+                  className="mt-1 w-full rounded border border-ink/20 bg-white px-3 py-2 dark:border-white/15 dark:bg-zinc-950 dark:text-zinc-100"
                   disabled={savingSettings}
                   value={pickMode ?? "member_proposed"}
                   onChange={(event) => setPickMode(event.target.value as AppLeague["pickMode"])}
@@ -302,7 +302,7 @@ export default function AdminPage() {
                 </select>
               </label>
               {pickMode === "admin_selected" ? (
-                <div className="rounded border border-ink/10 bg-ink/5 px-3 py-2 text-sm text-ink/65 md:col-span-2">
+                <div className="rounded border border-ink/10 bg-ink/5 px-3 py-2 text-sm text-ink/65 md:col-span-2 dark:border-white/10 dark:bg-white/5 dark:text-zinc-400">
                   Proposal limits are not used in admin-selected mode.
                 </div>
               ) : (
@@ -310,7 +310,7 @@ export default function AdminPage() {
                   <label className="text-sm font-semibold">
                     NFL lines per member
                     <input
-                      className="mt-1 w-full rounded border border-ink/20 px-3 py-2"
+                      className="mt-1 w-full rounded border border-ink/20 px-3 py-2 dark:border-white/15 dark:bg-zinc-950 dark:text-zinc-100"
                       disabled={savingSettings}
                       name="nflPickCountRequired"
                       type="number"
@@ -323,7 +323,7 @@ export default function AdminPage() {
                   <label className="text-sm font-semibold">
                     CFB lines per member
                     <input
-                      className="mt-1 w-full rounded border border-ink/20 px-3 py-2"
+                      className="mt-1 w-full rounded border border-ink/20 px-3 py-2 dark:border-white/15 dark:bg-zinc-950 dark:text-zinc-100"
                       disabled={savingSettings}
                       name="ncaafPickCountRequired"
                       type="number"
@@ -338,7 +338,7 @@ export default function AdminPage() {
               <label className="text-sm font-semibold">
                 DraftKings capture
                 <input
-                  className="mt-1 w-full rounded border border-ink/20 px-3 py-2"
+                  className="mt-1 w-full rounded border border-ink/20 px-3 py-2 dark:border-white/15 dark:bg-zinc-950 dark:text-zinc-100"
                   disabled={savingSettings}
                   type="datetime-local"
                   value={scrapeAtLocal}
@@ -348,7 +348,7 @@ export default function AdminPage() {
               <label className="text-sm font-semibold">
                 Pick cutoff
                 <input
-                  className="mt-1 w-full rounded border border-ink/20 px-3 py-2"
+                  className="mt-1 w-full rounded border border-ink/20 px-3 py-2 dark:border-white/15 dark:bg-zinc-950 dark:text-zinc-100"
                   disabled={savingSettings}
                   required
                   type="datetime-local"
@@ -356,7 +356,7 @@ export default function AdminPage() {
                   onChange={(event) => setCutoffAtLocal(event.target.value)}
                 />
               </label>
-              <button className="rounded bg-ink px-4 py-2 text-sm font-semibold text-white disabled:bg-ink/35" disabled={savingSettings || (pickMode !== "admin_selected" && (!isValidQuotaInput(nflQuota) || !isValidQuotaInput(ncaafQuota)))}>
+              <button className="rounded bg-ink px-4 py-2 text-sm font-semibold text-white disabled:bg-ink/35 dark:bg-zinc-100 dark:text-zinc-950 dark:disabled:bg-white/20 dark:disabled:text-zinc-500" disabled={savingSettings || (pickMode !== "admin_selected" && (!isValidQuotaInput(nflQuota) || !isValidQuotaInput(ncaafQuota)))}>
                 {savingSettings ? "Saving..." : "Save Settings"}
               </button>
             </div>
@@ -364,21 +364,21 @@ export default function AdminPage() {
         ) : null}
 
         <div className="mb-6 grid gap-4 lg:grid-cols-2">
-          <section className="rounded border border-ink/10 bg-white p-4">
+          <section className="rounded border border-ink/10 bg-white p-4 dark:border-white/10 dark:bg-zinc-900">
             <h2 className="mb-3 text-xl font-semibold">Members</h2>
             <div className="space-y-2">
               {members.map((member) => (
-                <div key={member.userId} className="grid gap-2 rounded bg-ink/5 p-3 text-sm md:grid-cols-[1fr_150px_96px] md:items-center">
+                <div key={member.userId} className="grid gap-2 rounded bg-ink/5 p-3 text-sm md:grid-cols-[1fr_150px_96px] md:items-center dark:bg-white/5">
                   <div>
                     <div className="font-semibold">{member.email ?? member.userId}</div>
-                    <div className="text-ink/55">{member.userId}</div>
+                    <div className="text-ink/55 dark:text-zinc-500">{member.userId}</div>
                   </div>
-                  <select className="rounded border border-ink/20 bg-white px-3 py-2" value={member.role} onChange={(event) => updateMember(member, event.target.value as "league_admin" | "player")}>
+                  <select className="rounded border border-ink/20 bg-white px-3 py-2 dark:border-white/15 dark:bg-zinc-950 dark:text-zinc-100" value={member.role} onChange={(event) => updateMember(member, event.target.value as "league_admin" | "player")}>
                     <option value="player">Player</option>
                     <option value="league_admin">League admin</option>
                   </select>
                   {canShowRemoveMember(member, session) ? (
-                    <button className="rounded border border-red-200 bg-white px-3 py-2 font-semibold text-red-700 hover:bg-red-50" onClick={() => removeMember(member)}>
+                    <button className="rounded border border-red-200 bg-white px-3 py-2 font-semibold text-red-700 hover:bg-red-50 dark:border-red-400/30 dark:bg-zinc-900 dark:text-red-300 dark:hover:bg-red-400/10" onClick={() => removeMember(member)}>
                       Remove
                     </button>
                   ) : (
@@ -386,20 +386,20 @@ export default function AdminPage() {
                   )}
                 </div>
               ))}
-              {!members.length ? <p className="text-sm text-ink/60">No members yet.</p> : null}
+              {!members.length ? <p className="text-sm text-ink/60 dark:text-zinc-400">No members yet.</p> : null}
             </div>
           </section>
 
-          <section className="rounded border border-ink/10 bg-white p-4">
+          <section className="rounded border border-ink/10 bg-white p-4 dark:border-white/10 dark:bg-zinc-900">
             <h2 className="mb-3 text-xl font-semibold">Proposed Lines</h2>
             <div className="grid gap-2 text-sm">
               {proposals.map((proposal) => (
-                <div key={proposal.proposalId} className="rounded bg-ink/5 p-3">
+                <div key={proposal.proposalId} className="rounded bg-ink/5 p-3 dark:bg-white/5">
                   <div className="font-semibold">{proposal.team}</div>
-                  <div className="text-ink/60">{proposal.sportLeague} · {formatMarketName(proposal.market)} · {proposal.side} {proposal.lineValue} · proposed by {proposal.proposerLabel ?? proposal.proposerId} · {proposal.result}</div>
+                  <div className="text-ink/60 dark:text-zinc-400">{proposal.sportLeague} · {formatMarketName(proposal.market)} · {proposal.side} {proposal.lineValue} · proposed by {proposal.proposerLabel ?? proposal.proposerId} · {proposal.result}</div>
                 </div>
               ))}
-              {!proposals.length ? <p className="text-ink/60">No lines proposed yet.</p> : null}
+              {!proposals.length ? <p className="text-ink/60 dark:text-zinc-400">No lines proposed yet.</p> : null}
             </div>
           </section>
         </div>
@@ -415,7 +415,7 @@ export default function AdminPage() {
                 locked={!week || new Date() >= new Date(week.cutoffAt)}
                 onPick={pickMode === "admin_selected" ? toggleAdminBoardLine : undefined}
               />
-              <div className="rounded-b border-x border-b border-ink/15 bg-white px-4 py-2 text-sm text-ink/60 shadow-sm ring-1 ring-ink/5">
+              <div className="rounded-b border-x border-b border-ink/15 bg-white px-4 py-2 text-sm text-ink/60 shadow-sm ring-1 ring-ink/5 dark:border-white/15 dark:bg-zinc-900 dark:text-zinc-400 dark:ring-white/5">
                 {game.options.length} available options · {proposals.filter((proposal) => proposal.gameId === game.gameId && proposal.proposalSource === "admin_selected").length} league board lines · {proposals.filter((proposal) => proposal.gameId === game.gameId && proposal.proposalSource !== "admin_selected").length} member proposed · {proposalResponses.filter((response) => proposals.some((proposal) => proposal.gameId === game.gameId && proposal.proposalId === response.proposalId)).length} responses
               </div>
             </div>
@@ -423,11 +423,11 @@ export default function AdminPage() {
         </section>
       </section>
       {showCreateLeague ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/50 px-5">
-          <form className="w-full max-w-md rounded border border-ink/10 bg-white p-5 shadow-xl" onSubmit={createLeague}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/50 px-5 dark:bg-black/70">
+          <form className="w-full max-w-md rounded border border-ink/10 bg-white p-5 shadow-xl dark:border-white/10 dark:bg-zinc-900" onSubmit={createLeague}>
             <div className="mb-4 flex items-center justify-between gap-3">
               <h2 className="text-xl font-semibold">Create League</h2>
-              <button className="rounded px-2 py-1 text-ink/60 hover:bg-ink/5" type="button" onClick={() => setShowCreateLeague(false)}>
+              <button className="rounded px-2 py-1 text-ink/60 hover:bg-ink/5 dark:text-zinc-400 dark:hover:bg-white/10" type="button" onClick={() => setShowCreateLeague(false)}>
                 Close
               </button>
             </div>
@@ -435,7 +435,7 @@ export default function AdminPage() {
               League name
               <input
                 autoFocus
-                className="mt-1 w-full rounded border border-ink/20 px-3 py-2"
+                className="mt-1 w-full rounded border border-ink/20 px-3 py-2 dark:border-white/15 dark:bg-zinc-950 dark:text-zinc-100"
                 disabled={creatingLeague}
                 value={newLeagueName}
                 onChange={(event) => setNewLeagueName(event.target.value)}
@@ -443,10 +443,10 @@ export default function AdminPage() {
               />
             </label>
             <div className="mt-5 flex justify-end gap-2">
-              <button className="rounded border border-ink/20 px-4 py-2 text-sm font-semibold" disabled={creatingLeague} type="button" onClick={() => setShowCreateLeague(false)}>
+              <button className="rounded border border-ink/20 px-4 py-2 text-sm font-semibold dark:border-white/15" disabled={creatingLeague} type="button" onClick={() => setShowCreateLeague(false)}>
                 Cancel
               </button>
-              <button className="rounded bg-ink px-4 py-2 text-sm font-semibold text-white disabled:bg-ink/35" disabled={creatingLeague || !newLeagueName.trim()}>
+              <button className="rounded bg-ink px-4 py-2 text-sm font-semibold text-white disabled:bg-ink/35 dark:bg-zinc-100 dark:text-zinc-950 dark:disabled:bg-white/20 dark:disabled:text-zinc-500" disabled={creatingLeague || !newLeagueName.trim()}>
                 {creatingLeague ? "Creating..." : "Create"}
               </button>
             </div>
