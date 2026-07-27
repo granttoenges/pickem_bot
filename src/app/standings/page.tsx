@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { AppShell } from "../../components/AppShell";
+import { AuthGuard } from "../../components/AuthGuard";
 import { apiGet, AppLeague, Standing } from "../../lib/api";
 import { appConfig } from "../../lib/config";
 import { getPreferredLeagueId, persistPreferredLeagueId } from "../../lib/leaguePreference";
@@ -37,6 +38,7 @@ export default function StandingsPage() {
   }, [activeLeagueId]);
 
   return (
+    <AuthGuard>
     <AppShell>
       <section className="mx-auto max-w-4xl px-5 py-8 md:px-8">
         <div className="flex flex-wrap items-end justify-between gap-4">
@@ -85,6 +87,7 @@ export default function StandingsPage() {
         </div>
       </section>
     </AppShell>
+    </AuthGuard>
   );
 }
 

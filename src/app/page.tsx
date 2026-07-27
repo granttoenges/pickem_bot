@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AppShell } from "../components/AppShell";
+import { AuthGuard } from "../components/AuthGuard";
 import { GameOddsBoard } from "../components/GameOddsBoard";
 import { TeamLogo } from "../components/TeamLogo";
 import { apiGet, apiSend, AppLeague, GameWithOptions, LineProposal, PickClaim, PickOption, ProposalResponse, ProposalResponseStance, ProposalSummary, SportLeague, Week, weekQuery } from "../lib/api";
@@ -212,6 +213,7 @@ export default function PlayerBoardPage() {
   const emptySportLabel = sportEmptyLabel(sportFilter);
 
   return (
+    <AuthGuard>
     <AppShell>
       {quotaModalMessage ? (
         <div className="fixed inset-x-0 top-6 z-50 flex justify-center px-4">
@@ -391,6 +393,7 @@ export default function PlayerBoardPage() {
         )}
       </section>
     </AppShell>
+    </AuthGuard>
   );
 }
 

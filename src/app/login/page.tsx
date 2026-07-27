@@ -1,8 +1,8 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { completeNewPassword, login } from "../../lib/auth";
+import { completeNewPassword, destinationAfterLogin, getStoredSession, login } from "../../lib/auth";
 import { friendlyPasswordError, isValidPassword, passwordRequirements } from "../../lib/passwordPolicy";
 
 export default function LoginPage() {
@@ -12,8 +12,18 @@ export default function LoginPage() {
   const [newPassword, setNewPassword] = useState("");
   const [needsNewPassword, setNeedsNewPassword] = useState(false);
   const [status, setStatus] = useState("");
+  const [nextPath, setNextPath] = useState<string | null>(null);
   const requirements = passwordRequirements(newPassword);
   const canSetPassword = isValidPassword(newPassword);
+
+  useEffect(() => {
+    const next = new URLSearchParams(window.location.search).get("next");
+    setNextPath(next);
+    const session = getStoredSession();
+    if (session) {
+      router.replace(destinationAfterLogin(session, next));
+    }
+  }, [router]);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -25,7 +35,7 @@ export default function LoginPage() {
         setStatus("Choose a new password to finish activating your account.");
         return;
       }
-      router.push(session.groups.includes("admin") ? "/admin" : "/");
+      router.push(destinationAfterLogin(session, nextPath));
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Login failed.");
     }
@@ -40,7 +50,7 @@ export default function LoginPage() {
     setStatus("Setting password...");
     try {
       const session = await completeNewPassword(newPassword, email);
-      router.push(session.groups.includes("admin") ? "/admin" : "/");
+      router.push(destinationAfterLogin(session, nextPath));
     } catch (error) {
       setStatus(friendlyPasswordError(error));
     }

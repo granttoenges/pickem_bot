@@ -10,11 +10,18 @@ import { appConfig } from "./config";
 
 const tokenKey = "pickem.idToken";
 const emailKey = "pickem.email";
+const sessionExpiredMessage = "Your session expired. Please sign in again.";
 
 export interface SessionState {
   idToken: string;
   email: string;
   groups: string[];
+}
+
+export interface TokenPayload {
+  email?: string;
+  "cognito:groups"?: string[];
+  exp?: number;
 }
 
 export interface NewPasswordRequiredState {
@@ -33,7 +40,8 @@ export function getStoredSession(): SessionState | undefined {
   window.localStorage.removeItem(emailKey);
   const token = sessionToken;
   const email = window.sessionStorage.getItem(emailKey);
-  if (!token || !email) {
+  if (!token || !email || isTokenExpired(token)) {
+    clearStoredSession();
     return undefined;
   }
   return {
@@ -44,11 +52,46 @@ export function getStoredSession(): SessionState | undefined {
 }
 
 export function logout(): void {
+  clearStoredSession();
+}
+
+export function clearStoredSession(): void {
   window.sessionStorage.removeItem(tokenKey);
   window.sessionStorage.removeItem(emailKey);
   window.localStorage.removeItem(tokenKey);
   window.localStorage.removeItem(emailKey);
   window.localStorage.removeItem("pickem.groups");
+}
+
+export function requireSession(currentPath?: string): SessionState | undefined {
+  const session = getStoredSession();
+  if (session) {
+    return session;
+  }
+  redirectToLogin(currentPath);
+  return undefined;
+}
+
+export function redirectToLogin(currentPath?: string): void {
+  if (typeof window === "undefined") {
+    return;
+  }
+  clearStoredSession();
+  const next = currentPath ?? `${window.location.pathname}${window.location.search}`;
+  const loginPath = `/login?next=${encodeURIComponent(next || "/")}`;
+  window.location.assign(loginPath);
+}
+
+export function isSafeInternalPath(value: string | null | undefined): value is string {
+  return Boolean(value) && value!.startsWith("/") && !value!.startsWith("//") && !value!.includes("://");
+}
+
+export function defaultRouteForSession(session: SessionState): string {
+  return session.groups.some((group) => group === "admin" || group === "super_admin") ? "/admin" : "/";
+}
+
+export function destinationAfterLogin(session: SessionState, next?: string | null): string {
+  return isSafeInternalPath(next) ? next : defaultRouteForSession(session);
 }
 
 export async function login(email: string, password: string): Promise<SessionState | NewPasswordRequiredState> {
@@ -99,13 +142,30 @@ function persistSession(session: CognitoUserSession, fallbackEmail: string): Ses
   return state;
 }
 
-function groupsFromToken(token: string): string[] {
+export function isTokenExpired(token: string, nowSeconds = Math.floor(Date.now() / 1000)): boolean {
+  const payload = decodeTokenPayload(token);
+  return typeof payload?.exp !== "number" || payload.exp <= nowSeconds;
+}
+
+export function decodeTokenPayload(token: string): TokenPayload | undefined {
   try {
-    const payload = JSON.parse(window.atob(token.split(".")[1] ?? "")) as { "cognito:groups"?: string[] };
-    return payload["cognito:groups"] ?? [];
+    return JSON.parse(base64UrlDecode(token.split(".")[1] ?? "")) as TokenPayload;
   } catch {
-    return [];
+    return undefined;
   }
+}
+
+function groupsFromToken(token: string): string[] {
+  return decodeTokenPayload(token)?.["cognito:groups"] ?? [];
+}
+
+function base64UrlDecode(value: string): string {
+  const normalized = value.replace(/-/g, "+").replace(/_/g, "/");
+  const padded = normalized.padEnd(normalized.length + ((4 - normalized.length % 4) % 4), "=");
+  if (typeof window !== "undefined") {
+    return window.atob(padded);
+  }
+  return Buffer.from(padded, "base64").toString("utf8");
 }
 
 function getUserPool(): CognitoUserPool {

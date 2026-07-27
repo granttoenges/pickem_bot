@@ -2,6 +2,7 @@
 
 import { FormEvent, useEffect, useState } from "react";
 import { AppShell } from "../../components/AppShell";
+import { AuthGuard } from "../../components/AuthGuard";
 import { GameOddsBoard } from "../../components/GameOddsBoard";
 import {
   apiGet,
@@ -299,6 +300,7 @@ export default function AdminPage() {
   }
 
   return (
+    <AuthGuard>
     <AppShell>
       <section className="mx-auto max-w-7xl px-5 py-8 md:px-8">
         <div className="mb-6 grid gap-4 lg:grid-cols-[1fr_360px]">
@@ -561,6 +563,7 @@ export default function AdminPage() {
         </div>
       ) : null}
     </AppShell>
+    </AuthGuard>
   );
 }
 

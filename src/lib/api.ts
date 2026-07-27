@@ -1,7 +1,7 @@
 "use client";
 
 import { appConfig } from "./config";
-import { getStoredSession } from "./auth";
+import { getStoredSession, redirectToLogin } from "./auth";
 
 export type SportLeague = "NFL" | "NCAAF";
 export type PickMode = "member_proposed" | "admin_selected";
@@ -205,6 +205,10 @@ async function apiRequest<T>(path: string, init: RequestInit): Promise<T> {
     }
   });
   const payload = await response.json().catch(() => ({}));
+  if (response.status === 401 || response.status === 403) {
+    redirectToLogin();
+    throw new Error("Your session expired. Please sign in again.");
+  }
   if (!response.ok) {
     throw new Error(payload.message ?? "API request failed.");
   }
