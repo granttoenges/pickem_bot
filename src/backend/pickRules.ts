@@ -22,8 +22,9 @@ export function validateQuota(week: Week, sportLeague: SportLeague, currentPicks
 }
 
 export function proposalSummary(proposals: LineProposal[], week: Week) {
-  const nfl = proposals.filter((proposal) => proposal.sportLeague === "NFL").length;
-  const ncaaf = proposals.filter((proposal) => proposal.sportLeague === "NCAAF").length;
+  const memberProposals = proposals.filter((proposal) => proposal.proposalSource !== "admin_selected");
+  const nfl = memberProposals.filter((proposal) => proposal.sportLeague === "NFL").length;
+  const ncaaf = memberProposals.filter((proposal) => proposal.sportLeague === "NCAAF").length;
   return {
     NFL: { submitted: nfl, required: week.nflPickCountRequired, complete: nfl === week.nflPickCountRequired },
     NCAAF: { submitted: ncaaf, required: week.ncaafPickCountRequired, complete: ncaaf === week.ncaafPickCountRequired },
@@ -32,7 +33,7 @@ export function proposalSummary(proposals: LineProposal[], week: Week) {
 }
 
 export function validateProposalQuota(week: Week, sportLeague: SportLeague, currentProposals: LineProposal[], previousProposalId: string | undefined): void {
-  const existingCount = currentProposals.filter((proposal) => proposal.sportLeague === sportLeague && proposal.proposalId !== previousProposalId).length;
+  const existingCount = currentProposals.filter((proposal) => proposal.proposalSource !== "admin_selected" && proposal.sportLeague === sportLeague && proposal.proposalId !== previousProposalId).length;
   const required = sportLeague === "NFL" ? week.nflPickCountRequired : week.ncaafPickCountRequired;
   if (existingCount >= required) {
     throw new Error(`${sportLeague} proposal limit is already full.`);

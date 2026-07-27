@@ -90,6 +90,12 @@ describe("pick rules", () => {
     expect(() => validateProposalQuota(week, "NCAAF", [proposal("a", "NCAAF"), proposal("b", "NCAAF"), proposal("c", "NCAAF")], undefined)).toThrow("NCAAF proposal limit");
   });
 
+  it("excludes admin-selected lines from member proposal limits", () => {
+    const adminLine = { ...proposal("admin", "NCAAF"), proposalSource: "admin_selected" as const };
+    expect(proposalSummary([adminLine, proposal("a", "NCAAF"), proposal("b", "NCAAF")], week).NCAAF.submitted).toBe(2);
+    expect(() => validateProposalQuota(week, "NCAAF", [adminLine, proposal("a", "NCAAF"), proposal("b", "NCAAF")], undefined)).not.toThrow();
+  });
+
   it("allows replacing an existing proposed line when a sport limit is full", () => {
     expect(() => validateProposalQuota(week, "NCAAF", [proposal("a", "NCAAF"), proposal("b", "NCAAF"), proposal("c", "NCAAF")], "a")).not.toThrow();
   });

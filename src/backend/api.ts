@@ -21,6 +21,10 @@ const createLeagueSchema = z.object({
   name: z.string().min(1).max(80)
 });
 
+const leagueSettingsSchema = z.object({
+  pickMode: z.enum(["member_proposed", "admin_selected"])
+});
+
 const memberSchema = z.object({
   userId: z.string().min(1),
   email: z.string().email().optional(),
@@ -82,6 +86,20 @@ const proposalSchema = z.object({
   previousProposalId: z.string().optional()
 });
 
+const adminBoardLineSchema = z.object({
+  leagueId: z.string().min(1),
+  seasonId: z.string().min(1),
+  weekId: z.string().min(1),
+  optionId: z.string().min(1)
+});
+
+const deleteAdminBoardLineSchema = z.object({
+  leagueId: z.string().min(1),
+  seasonId: z.string().min(1),
+  weekId: z.string().min(1),
+  proposalId: z.string().min(1)
+});
+
 const releaseProposalSchema = z.object({
   leagueId: z.string().min(1),
   seasonId: z.string().min(1),
@@ -125,7 +143,7 @@ export async function handler(event: APIGatewayProxyEventV2WithJWTAuthorizer): P
 
     if (method === "GET" && path === "/leagues") {
       const leagues = await leaguesForUser(repository, auth);
-      return json({ leagues });
+      return json({ leagues: leagues.map(normalizeAppLeague) });
     }
 
     if (method === "POST" && path === "/admin/leagues") {
@@ -137,7 +155,8 @@ export async function handler(event: APIGatewayProxyEventV2WithJWTAuthorizer): P
         name: body.name,
         createdBy: auth.userId,
         createdAt: now,
-        status: "active"
+        status: "active",
+        pickMode: "member_proposed"
       };
       await repository.putAppLeague(league).catch((error) => {
         if (error instanceof Error && error.name === "ConditionalCheckFailedException") {
@@ -153,6 +172,15 @@ export async function handler(event: APIGatewayProxyEventV2WithJWTAuthorizer): P
         createdAt: now
       });
       return json({ league }, 201);
+    }
+
+    const leagueSettingsMatch = path.match(/^\/admin\/leagues\/([^/]+)\/settings$/);
+    if (method === "PUT" && leagueSettingsMatch) {
+      const leagueId = decodeURIComponent(leagueSettingsMatch[1]);
+      await requireLeagueAdmin(repository, auth, leagueId);
+      const body = leagueSettingsSchema.parse(parseBody(event));
+      const league = await repository.updateAppLeaguePickMode(leagueId, body.pickMode);
+      return json({ league: normalizeAppLeague(league) });
     }
 
     const memberMatch = path.match(/^\/admin\/leagues\/([^/]+)\/members$/);
@@ -176,7 +204,8 @@ export async function handler(event: APIGatewayProxyEventV2WithJWTAuthorizer): P
       const seasonId = requireQuery(event, "seasonId");
       const weekId = requireQuery(event, "weekId");
       await requireLeagueAccess(repository, auth, leagueId);
-      const [week, games, options, claims, userPicks, persistedProposals, responses, members] = await Promise.all([
+      const [league, week, games, options, claims, userPicks, persistedProposals, responses, members] = await Promise.all([
+        repository.getAppLeague(leagueId),
         repository.getWeek(leagueId, seasonId, weekId),
         repository.listWeekGames(leagueId, seasonId, weekId),
         repository.listPickOptions(leagueId, seasonId, weekId),
@@ -188,8 +217,11 @@ export async function handler(event: APIGatewayProxyEventV2WithJWTAuthorizer): P
       ]);
       const selectedWeek = week ?? defaultWeek(leagueId, seasonId, weekId);
       const proposals = hydrateProposalLabels(mergeLegacyPickProposals(persistedProposals, await repository.listPicks(leagueId, seasonId, weekId)), members);
-      const userProposals = proposals.filter((proposal) => proposal.proposerId === auth.userId);
+      const pickMode = normalizePickMode(league?.pickMode);
+      const userProposals = proposals.filter((proposal) => proposal.proposalSource !== "admin_selected" && proposal.proposerId === auth.userId);
       return json({
+        league: league ? normalizeAppLeague(league) : undefined,
+        pickMode,
         week: selectedWeek,
         games: await withOptions(repository, games, options),
         claims,
@@ -208,7 +240,8 @@ export async function handler(event: APIGatewayProxyEventV2WithJWTAuthorizer): P
       const seasonId = requireQuery(event, "seasonId");
       const weekId = requireQuery(event, "weekId");
       await requireLeagueAdmin(repository, auth, leagueId);
-      const [week, games, options, claims, picks, persistedProposals, responses, scrapeRuns, members] = await Promise.all([
+      const [league, week, games, options, claims, picks, persistedProposals, responses, scrapeRuns, members] = await Promise.all([
+        repository.getAppLeague(leagueId),
         repository.getWeek(leagueId, seasonId, weekId),
         repository.listWeekGames(leagueId, seasonId, weekId),
         repository.listPickOptions(leagueId, seasonId, weekId),
@@ -221,6 +254,8 @@ export async function handler(event: APIGatewayProxyEventV2WithJWTAuthorizer): P
       ]);
       const proposals = hydrateProposalLabels(mergeLegacyPickProposals(persistedProposals, picks), members);
       return json({
+        league: league ? normalizeAppLeague(league) : undefined,
+        pickMode: normalizePickMode(league?.pickMode),
         week: week ?? defaultWeek(leagueId, seasonId, weekId),
         games: await withOptions(repository, games, options),
         claims,
@@ -251,6 +286,69 @@ export async function handler(event: APIGatewayProxyEventV2WithJWTAuthorizer): P
       });
       await repository.putWeek(week);
       return json({ week });
+    }
+
+    if (method === "PUT" && path === "/admin/board-lines") {
+      const body = adminBoardLineSchema.parse(parseBody(event));
+      await requireLeagueAdmin(repository, auth, body.leagueId);
+      const [league, week, options] = await Promise.all([
+        repository.getAppLeague(body.leagueId),
+        repository.getWeek(body.leagueId, body.seasonId, body.weekId),
+        listAvailablePickOptions(repository, body.leagueId, body.seasonId, body.weekId)
+      ]);
+      if (normalizePickMode(league?.pickMode) !== "admin_selected") {
+        return json({ message: "League is not in admin-selected mode." }, 409);
+      }
+      if (!week) {
+        return json({ message: "Week not found." }, 404);
+      }
+      assertBeforeCutoff(new Date(), week.cutoffAt);
+      const option = options.find((item) => item.optionId === body.optionId);
+      if (!option) {
+        return json({ message: "Pick option not found." }, 404);
+      }
+      const now = new Date().toISOString();
+      const proposal: LineProposal = {
+        leagueId: body.leagueId,
+        seasonId: body.seasonId,
+        weekId: body.weekId,
+        proposalId: adminBoardProposalIdFor(body.optionId),
+        optionId: body.optionId,
+        proposerId: adminBoardProposerId(),
+        proposerLabel: "League Board",
+        proposalSource: "admin_selected",
+        gameId: option.gameId,
+        sportLeague: option.sportLeague,
+        team: option.team,
+        market: option.market,
+        side: option.side,
+        lineValue: option.lineValue,
+        label: option.label,
+        submittedAt: now,
+        result: "pending"
+      };
+      await repository.putProposal(proposal);
+      return json({ proposal });
+    }
+
+    if (method === "DELETE" && path === "/admin/board-lines") {
+      const body = deleteAdminBoardLineSchema.parse(parseBody(event));
+      await requireLeagueAdmin(repository, auth, body.leagueId);
+      const week = await repository.getWeek(body.leagueId, body.seasonId, body.weekId);
+      if (!week) {
+        return json({ message: "Week not found." }, 404);
+      }
+      assertBeforeCutoff(new Date(), week.cutoffAt);
+      const proposal = (await repository.listProposals(body.leagueId, body.seasonId, body.weekId)).find((item) => item.proposalId === body.proposalId);
+      if (!proposal || proposal.proposalSource !== "admin_selected") {
+        return json({ message: "Admin-selected line not found." }, 404);
+      }
+      await repository.deleteProposal(body.leagueId, body.seasonId, body.weekId, adminBoardProposerId(), body.proposalId);
+      const responses = await repository.listProposalResponses(body.leagueId, body.seasonId, body.weekId);
+      await Promise.all(responses
+        .filter((response) => response.proposalId === body.proposalId)
+        .map((response) => repository.deleteProposalResponse(body.leagueId, body.seasonId, body.weekId, body.proposalId, response.responderId)));
+      return json({ ok: true });
     }
 
     if (method === "POST" && path === "/admin/invites") {
@@ -301,7 +399,8 @@ export async function handler(event: APIGatewayProxyEventV2WithJWTAuthorizer): P
     if (method === "PUT" && path === "/proposals") {
       const body = proposalSchema.parse(parseBody(event));
       await requireLeagueAccess(repository, auth, body.leagueId);
-      const [week, options, persistedCurrentProposals, currentPicks] = await Promise.all([
+      const [league, week, options, persistedCurrentProposals, currentPicks] = await Promise.all([
+        repository.getAppLeague(body.leagueId),
         repository.getWeek(body.leagueId, body.seasonId, body.weekId),
         listAvailablePickOptions(repository, body.leagueId, body.seasonId, body.weekId),
         repository.listUserProposals(body.leagueId, body.seasonId, body.weekId, auth.userId),
@@ -309,6 +408,9 @@ export async function handler(event: APIGatewayProxyEventV2WithJWTAuthorizer): P
       ]);
       if (!week) {
         return json({ message: "Week not found." }, 404);
+      }
+      if (normalizePickMode(league?.pickMode) === "admin_selected") {
+        return json({ message: "This league uses admin-selected lines. Respond from League Picks instead." }, 409);
       }
       assertBeforeCutoff(new Date(), week.cutoffAt);
       const option = options.find((item) => item.optionId === body.optionId);
@@ -327,6 +429,7 @@ export async function handler(event: APIGatewayProxyEventV2WithJWTAuthorizer): P
         optionId: body.optionId,
         proposerId: auth.userId,
         proposerLabel: auth.email ?? shortUserId(auth.userId),
+        proposalSource: "member",
         gameId: option.gameId,
         sportLeague: option.sportLeague,
         team: option.team,
@@ -610,6 +713,7 @@ function mergeLegacyPickProposals(proposals: LineProposal[], picks: PlayerPick[]
       gameId: pick.gameId,
       proposerId: pick.userId,
       proposerLabel: shortUserId(pick.userId),
+      proposalSource: "member",
       sportLeague: pick.sportLeague,
       team: pick.team,
       market: pick.market,
@@ -633,6 +737,25 @@ function hydrateProposalLabels(proposals: LineProposal[], members: LeagueMember[
 
 function proposalIdFor(userId: string, optionId: string): string {
   return `${userId}::${optionId}`;
+}
+
+function adminBoardProposalIdFor(optionId: string): string {
+  return `league-board::${optionId}`;
+}
+
+function adminBoardProposerId(): string {
+  return "__league_board__";
+}
+
+function normalizePickMode(pickMode: AppLeague["pickMode"]): NonNullable<AppLeague["pickMode"]> {
+  return pickMode === "admin_selected" ? "admin_selected" : "member_proposed";
+}
+
+function normalizeAppLeague(league: AppLeague): AppLeague {
+  return {
+    ...league,
+    pickMode: normalizePickMode(league.pickMode)
+  };
 }
 
 function shortUserId(userId: string): string {

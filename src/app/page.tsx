@@ -47,6 +47,7 @@ export default function PlayerBoardPage() {
   async function loadWeek(leagueId = activeLeagueId) {
     try {
       const payload = await apiGet<{
+        pickMode: AppLeague["pickMode"];
         week: Week;
         games: GameWithOptions[];
         claims: PickClaim[];
@@ -73,6 +74,11 @@ export default function PlayerBoardPage() {
 
   async function proposeOption(option: PickOption) {
     if (locked) {
+      return;
+    }
+    const activeLeague = leagues.find((league) => league.leagueId === activeLeagueId);
+    if ((activeLeague?.pickMode ?? "member_proposed") === "admin_selected") {
+      setStatus("This league uses admin-selected lines. Go to League Picks to choose with or against.");
       return;
     }
     const currentProposal = userProposals.find((proposal) => proposal.optionId === option.optionId);
@@ -139,10 +145,12 @@ export default function PlayerBoardPage() {
     }
   }
 
+  const activeLeague = leagues.find((league) => league.leagueId === activeLeagueId);
+  const pickMode = activeLeague?.pickMode ?? "member_proposed";
   const userOptionIds = new Set(userProposals.map((proposal) => proposal.optionId));
   const gamesById = new Map(games.map((game) => [game.gameId, game]));
   const userResponseByProposal = new Map(userProposalResponses.map((response) => [response.proposalId, response]));
-  const otherProposals = proposals.filter((proposal) => !userProposals.some((userProposal) => userProposal.proposalId === proposal.proposalId));
+  const otherProposals = proposals.filter((proposal) => proposal.proposalSource === "admin_selected" || !userProposals.some((userProposal) => userProposal.proposalId === proposal.proposalId));
 
   return (
     <AppShell>
@@ -172,7 +180,7 @@ export default function PlayerBoardPage() {
           </div>
         </div>
 
-        {summary ? (
+        {summary && pickMode === "member_proposed" ? (
           <div className="mb-4 grid gap-3 md:grid-cols-3">
             <Quota label="NFL" submitted={summary.NFL.submitted} required={summary.NFL.required} />
             <Quota label="CFB" submitted={summary.NCAAF.submitted} required={summary.NCAAF.required} />
@@ -193,14 +201,20 @@ export default function PlayerBoardPage() {
 
         {tab === "available" ? (
           <div className="space-y-3">
+            {pickMode === "admin_selected" ? (
+              <div className="rounded border border-ink/10 bg-white p-3 text-sm text-ink/70">
+                This league uses admin-selected lines. Review available games here, then use League Picks to choose with or against.
+              </div>
+            ) : null}
             {games.map((game) => (
               <GameOddsBoard
                 key={game.gameId}
                 game={game}
                 claims={[]}
                 userOptionIds={userOptionIds}
-                locked={locked}
-                onPick={proposeOption}
+                locked={locked || pickMode === "admin_selected"}
+                mode={pickMode === "admin_selected" ? "summary" : "claim"}
+                onPick={pickMode === "admin_selected" ? undefined : proposeOption}
               />
             ))}
             {!games.length && !status ? <div className="rounded border border-ink/10 bg-white p-6">No games are available for this league week yet.</div> : null}
@@ -223,7 +237,7 @@ export default function PlayerBoardPage() {
                 </div>
               </article>
             ))}
-            {!userProposals.length ? <div className="rounded border border-ink/10 bg-white p-6 text-ink/60">You have not proposed any lines yet.</div> : null}
+            {!userProposals.length ? <div className="rounded border border-ink/10 bg-white p-6 text-ink/60">{pickMode === "admin_selected" ? "This league uses admin-selected lines, so you do not need to propose your own lines." : "You have not proposed any lines yet."}</div> : null}
           </div>
         ) : (
           <div className="grid gap-3 md:grid-cols-2">
@@ -241,7 +255,7 @@ export default function PlayerBoardPage() {
                   </div>
                   <div className="mt-4 flex gap-2">
                     <button
-                      className={`rounded px-4 py-2 text-sm font-semibold disabled:bg-ink/20 disabled:text-ink/40 ${response?.stance === "with" ? "bg-gold text-ink" : "bg-turf text-white"}`}
+                      className={`rounded px-4 py-2 text-sm font-semibold disabled:bg-ink/20 disabled:text-ink/40 ${response?.stance === "with" ? "bg-gold text-ink" : "border border-ink/20 bg-white text-ink"}`}
                       disabled={locked}
                       onClick={() => respondToProposal(proposal, "with")}
                     >

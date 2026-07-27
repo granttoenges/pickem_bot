@@ -4,6 +4,7 @@ import { appConfig } from "./config";
 import { getStoredSession } from "./auth";
 
 export type SportLeague = "NFL" | "NCAAF";
+export type PickMode = "member_proposed" | "admin_selected";
 export type Market = "spread" | "team_total" | "moneyline";
 export type PickSide = "home" | "away" | "over" | "under";
 export type PickResult = "win" | "loss" | "push" | "pending";
@@ -13,6 +14,7 @@ export interface AppLeague {
   leagueId: string;
   name: string;
   status: string;
+  pickMode?: PickMode;
 }
 
 export interface OpeningLine {
@@ -116,6 +118,7 @@ export interface LineProposal {
   gameId: string;
   proposerId: string;
   proposerLabel?: string;
+  proposalSource?: "member" | "admin_selected";
   sportLeague: SportLeague;
   team: string;
   market: Market;

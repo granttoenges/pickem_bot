@@ -6,6 +6,7 @@ import {
   PutCommand,
   QueryCommand,
   ScanCommand,
+  UpdateCommand,
   TransactWriteCommand
 } from "@aws-sdk/lib-dynamodb";
 import type {
@@ -52,6 +53,28 @@ export class PickemRepository {
       },
       ConditionExpression: "attribute_not_exists(pk)"
     }));
+  }
+
+  async getAppLeague(leagueId: string): Promise<AppLeague | undefined> {
+    const result = await client.send(new GetCommand({
+      TableName: this.tableName,
+      Key: { pk: "APP_LEAGUE", sk: `LEAGUE#${leagueId}` }
+    }));
+    return result.Item as AppLeague | undefined;
+  }
+
+  async updateAppLeaguePickMode(leagueId: string, pickMode: NonNullable<AppLeague["pickMode"]>): Promise<AppLeague> {
+    const result = await client.send(new UpdateCommand({
+      TableName: this.tableName,
+      Key: { pk: "APP_LEAGUE", sk: `LEAGUE#${leagueId}` },
+      UpdateExpression: "set pickMode = :pickMode",
+      ConditionExpression: "attribute_exists(pk)",
+      ExpressionAttributeValues: {
+        ":pickMode": pickMode
+      },
+      ReturnValues: "ALL_NEW"
+    }));
+    return result.Attributes as AppLeague;
   }
 
   async listMembersForUser(userId: string): Promise<LeagueMember[]> {

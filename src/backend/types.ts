@@ -1,6 +1,7 @@
 export type SportLeague = "NFL" | "NCAAF";
 export type AppLeagueStatus = "active" | "archived";
 export type LeagueMemberRole = "league_admin" | "player";
+export type PickMode = "member_proposed" | "admin_selected";
 export type Market = "spread" | "team_total" | "moneyline";
 export type PickSide = "home" | "away" | "over" | "under";
 export type PickResult = "win" | "loss" | "push" | "pending";
@@ -12,6 +13,7 @@ export interface AppLeague {
   createdBy: string;
   createdAt: string;
   status: AppLeagueStatus;
+  pickMode?: PickMode;
 }
 
 export interface LeagueMember {
@@ -119,6 +121,7 @@ export interface LineProposal {
   gameId: string;
   proposerId: string;
   proposerLabel?: string;
+  proposalSource?: "member" | "admin_selected";
   sportLeague: SportLeague;
   team: string;
   market: Market;

@@ -1,7 +1,7 @@
 import type { GameWithOptions, PickClaim, PickOption } from "../lib/api";
 import { TeamLogo } from "./TeamLogo";
 
-type Mode = "claim" | "summary";
+type Mode = "claim" | "summary" | "admin_select";
 
 export function GameOddsBoard({
   game,
@@ -28,12 +28,12 @@ export function GameOddsBoard({
 
   return (
     <article className="w-full overflow-hidden rounded-md border border-ink/15 bg-white text-ink shadow-md ring-1 ring-ink/5">
-      <header className="border-b border-ink/15 bg-field px-4 py-4">
+      <header className="border-b border-ink/15 bg-field px-3 py-3 sm:px-4 sm:py-4">
         <div className="flex items-center justify-between gap-3">
           <span className="rounded bg-ink px-3 py-1 text-xs font-extrabold tracking-wide text-white">{game.sportLeague}</span>
           <span className="text-xs font-semibold text-ink/50">{new Date(game.kickoffAt).toLocaleString()}</span>
         </div>
-        <div className="mt-4 grid grid-cols-[1fr_42px_1fr] items-center gap-3 text-center">
+        <div className="mt-3 grid grid-cols-[1fr_36px_1fr] items-center gap-2 text-center sm:mt-4 sm:grid-cols-[1fr_42px_1fr] sm:gap-3">
           <TeamHeader teamName={game.awayTeam} />
           <span className="mx-auto rounded-full bg-ink/5 px-2 py-1 text-[10px] font-bold uppercase text-ink/50">at</span>
           <TeamHeader teamName={game.homeTeam} />
@@ -41,9 +41,9 @@ export function GameOddsBoard({
         {game.adminNote ? <p className="mt-3 text-center text-xs text-ink/55">{game.adminNote}</p> : null}
       </header>
 
-      <div className="overflow-x-auto">
-        <div className="min-w-[520px]">
-          <div className="grid grid-cols-[minmax(220px,1fr)_minmax(132px,180px)_minmax(180px,240px)] border-b border-ink/15 bg-ink/5 px-3 py-3 text-[11px] font-extrabold uppercase tracking-wide text-ink/55">
+      <div>
+        <div>
+          <div className="grid grid-cols-[minmax(92px,1fr)_minmax(68px,84px)_minmax(132px,150px)] border-b border-ink/15 bg-ink/5 px-2 py-2 text-[10px] font-extrabold uppercase tracking-wide text-ink/55 sm:grid-cols-[minmax(220px,1fr)_minmax(132px,180px)_minmax(180px,240px)] sm:px-3 sm:py-3 sm:text-[11px]">
             <span>Game</span>
             <span className="text-center">Spread</span>
             <span className="text-center">Team Total</span>
@@ -79,8 +79,8 @@ export function GameOddsBoard({
 function TeamHeader({ teamName }: { teamName: string }) {
   return (
     <div className="flex min-w-0 flex-col items-center gap-2">
-      <TeamLogo teamName={teamName} />
-      <span className="max-w-full truncate text-[11px] font-extrabold uppercase tracking-wide text-ink/70">{teamName}</span>
+      <TeamLogo teamName={teamName} size="sm" />
+      <span className="max-w-full truncate text-[10px] font-extrabold uppercase tracking-wide text-ink/70 sm:text-[11px]">{teamName}</span>
     </div>
   );
 }
@@ -107,10 +107,10 @@ function TeamMarketRow({
   onPick?: (option: PickOption) => void;
 }) {
   return (
-    <div className="grid min-h-[72px] grid-cols-[minmax(220px,1fr)_minmax(132px,180px)_minmax(180px,240px)] items-stretch border-b border-ink/15 last:border-b-0">
-      <div className="flex min-w-0 items-center gap-3 px-3 py-3">
+    <div className="grid min-h-[58px] grid-cols-[minmax(92px,1fr)_minmax(68px,84px)_minmax(132px,150px)] items-stretch border-b border-ink/15 last:border-b-0 sm:min-h-[72px] sm:grid-cols-[minmax(220px,1fr)_minmax(132px,180px)_minmax(180px,240px)]">
+      <div className="flex min-w-0 items-center gap-2 px-2 py-2 sm:gap-3 sm:px-3 sm:py-3">
         <TeamLogo teamName={teamName} size="sm" />
-        <span className="min-w-0 truncate text-sm font-bold text-ink">{teamName}</span>
+        <span className="min-w-0 truncate text-xs font-bold text-ink sm:text-sm">{teamName}</span>
       </div>
       <OptionCell option={spread} claimByOption={claimByOption} userOptionIds={userOptionIds} locked={locked} mode={mode} onPick={onPick} />
       <div className="grid grid-cols-2 gap-px border-l border-ink/15 bg-ink/10 p-px">
@@ -155,13 +155,13 @@ function OptionCell({
 
   return (
     <button
-      className={`flex min-h-[70px] flex-col items-center justify-center border-l border-ink/15 px-2 text-center transition ${compact ? "min-h-0 border-l-0" : ""} ${cellClass(mine, disabled, mode)}`}
+      className={`flex min-h-[58px] flex-col items-center justify-center border-l border-ink/15 px-1 text-center transition sm:min-h-[70px] sm:px-2 ${compact ? "min-h-0 border-l-0" : ""} ${cellClass(mine, disabled, mode)}`}
       disabled={disabled}
       type="button"
       onClick={() => onPick?.(option)}
     >
-      <span className={`${compact ? "text-xs" : "text-sm"} font-extrabold leading-tight`}>{label}</span>
-      <span className="mt-1 text-[10px] font-extrabold uppercase leading-none">{mine ? "Mine" : claim ? "Claimed" : mode === "summary" ? "Open" : "Pick"}</span>
+      <span className={`${compact ? "text-[11px] sm:text-xs" : "text-xs sm:text-sm"} font-extrabold leading-tight`}>{label}</span>
+      <span className="mt-1 text-[9px] font-extrabold uppercase leading-none sm:text-[10px]">{actionLabel({ mine, claim: Boolean(claim), mode })}</span>
     </button>
   );
 }
@@ -181,6 +181,19 @@ function cellClass(mine: boolean, disabled: boolean, mode: Mode): string {
     return "bg-white text-ink/60";
   }
   return "bg-white text-turf hover:bg-turf/5 active:bg-turf/10";
+}
+
+function actionLabel({ mine, claim, mode }: { mine: boolean; claim: boolean; mode: Mode }): string {
+  if (mine) {
+    return mode === "admin_select" ? "Selected" : "Mine";
+  }
+  if (claim) {
+    return "Claimed";
+  }
+  if (mode === "summary") {
+    return "Open";
+  }
+  return mode === "admin_select" ? "Add" : "Pick";
 }
 
 function formatSigned(value: number): string {
