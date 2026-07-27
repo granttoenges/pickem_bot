@@ -1,146 +1,250 @@
-# Pickem Bot App + AWS DraftKings Scraper Blueprint
+# Pickem Bot App Blueprint
 
 ## Summary
 
-Pickem Bot is a private, invite-only NFL and college football pickem application. Users can belong to one or more app leagues, review the available weekly games, and claim exact spread or team-total over/under options. Once an exact option is claimed in a league, it is unavailable to other members of that league. The app uses Tuesday morning DraftKings opening-line values captured once per week. Picks for the week lock every Friday at 10:00 AM America/Chicago.
+Pickem Bot is a private, invite-only NFL and college football pickem app. Users belong to one or more app leagues. Each app league has its own admins, members, weekly settings, proposed lines, responses, and standings.
 
-The app is designed to run locally during development and deploy cheaply on AWS using serverless services with near-zero idle cost.
+DraftKings public pages are the only odds source. The app stores opening odds once and keeps them immutable. No The Odds API or paid odds provider is used.
 
-No The Odds API integration or paid odds provider is part of v1.
+The app is deployed as a low-cost AWS serverless system with Amplify Hosting, Cognito, API Gateway HTTP API, Lambda, DynamoDB, and EventBridge.
 
-## Product Scope
+## Product Model
 
 ### Roles
 
-- Super admin: create app leagues, assign league admins, invite users, and manage all league settings.
-- League admin: invite users, manage weekly pick quotas, review scraped games, correct lines, review submitted picks, correct results, and trigger grading for their league.
-- Player: log in, view weekly games and opening lines, claim or edit available pick options before cutoff, and view league standings.
+- `super_admin`: global operator. Can create leagues, manage all league members/admins, invite users, remove players/admins from leagues, and change any league settings.
+- `league_admin`: league-scoped operator. Can invite players, remove players, manage league settings, and select board lines for their assigned league.
+- `player`: league member. Can propose lines when the league uses member-proposed mode and respond `With` or `Against` to league picks.
+
+`grantoenges@gmail.com` is treated as the initial super admin.
+
+### League Modes
+
+- `member_proposed`: every member can propose an admin-configured number of NFL lines and NCAAF lines each week.
+- `admin_selected`: league admins select exact board lines; players respond `With` or `Against`; per-member proposal limits are not used.
+
+League mode is configured per app league.
 
 ### Weekly Flow
 
-1. Tuesday morning: scheduled DraftKings scraper captures NFL and NCAAF opening spreads.
-2. Admin reviews imported games and fixes missing or malformed lines; team totals can be seeded or entered manually until DraftKings team-total parsing is added.
-3. Players claim exact spread or team-total options until Friday 10:00 AM America/Chicago.
-4. After games finish, results sync imports final scores and grades picks against the stored opening lines.
-5. Standings update for the week and season.
+1. Admin sets league mode, proposal limits, DraftKings capture time, and pick cutoff.
+2. EventBridge runs a scrape scheduler every 15 minutes.
+3. The scheduler finds pending weeks whose `scrapeAt` time has passed and invokes the DraftKings scraper.
+4. Shared weekly games and immutable opening odds are stored for all leagues.
+5. Members propose lines or admins select board lines, depending on league mode.
+6. League members respond `With` or `Against` before `cutoffAt`.
+7. Results sync grades proposals and responses against the stored opening line.
+8. Standings aggregate wins, losses, and pushes by app league.
 
-## Technical Architecture
+## Pick Markets
 
-- Frontend: Next.js, React, TypeScript, Tailwind CSS.
-- Auth: Amazon Cognito user pool with invite-only users and `super_admin`, `admin`, and `player` groups.
-- API: API Gateway HTTP API with Lambda handlers.
-- Storage: DynamoDB single-table design using on-demand billing.
-- Odds automation: Scrapling-based DraftKings scraper.
-- Scheduling: EventBridge Scheduler for Tuesday scraper and separate result sync.
-- Hosting: AWS Amplify Hosting for the frontend.
-- Infrastructure: AWS CDK in TypeScript.
+Pickable markets:
 
-## Data Model
+- Team spread.
+- Team total over.
+- Team total under.
+- Game total over.
+- Game total under.
 
-Use a single DynamoDB table with composite keys:
+Moneyline odds may be stored from DraftKings for future use, but moneyline is not currently shown as a pickable market.
+
+Scoring:
+
+- Proposal owner is graded on the selected side.
+- `With` responses inherit the proposal result.
+- `Against` responses invert win/loss and preserve pushes.
+- Game total grading uses combined final score.
+
+## Frontend
+
+Routes:
+
+- `/login`: Cognito login and new-password challenge.
+- `/`: player board with `Available Games`, `My Picks`, and `League Picks`.
+- `/admin`: league settings, invites, members, board-line selection, scraper status, proposed lines, and submitted responses.
+- `/standings`: league-scoped standings.
+
+UI notes:
+
+- Player board has a league switcher and sport filter: `All`, `NFL`, `NCAA`.
+- Game cards use a full-width sportsbook-style layout with team logos.
+- Login stores Cognito tokens in `sessionStorage`, not `localStorage`.
+- New-password setup shows the current password policy before submit.
+
+## Backend/API
+
+Core endpoints:
+
+- `GET /health`
+- `GET /leagues`
+- `POST /admin/leagues`
+- `PUT /admin/leagues/{leagueId}/settings`
+- `PUT /admin/leagues/{leagueId}/members`
+- `DELETE /admin/leagues/{leagueId}/members`
+- `POST /admin/invites`
+- `GET /week?leagueId=...&seasonId=...&weekId=...`
+- `GET /admin/week?leagueId=...&seasonId=...&weekId=...`
+- `PUT /admin/week/settings`
+- `PUT /admin/board-lines`
+- `DELETE /admin/board-lines`
+- `PUT /proposals`
+- `DELETE /proposals`
+- `PUT /proposal-responses`
+- `DELETE /proposal-responses`
+- `GET /standings`
+
+Authorization:
+
+- API Gateway validates Cognito JWTs.
+- `super_admin` can manage all leagues.
+- `league_admin` can manage only assigned leagues.
+- `player` can access only assigned leagues and their own actions.
+- Legacy Cognito `admin` group is not a global authorization bypass.
+
+Member removal:
+
+- Super admins can remove players or league admins.
+- League admins can remove players only.
+- Self-removal and super-admin removal are blocked.
+- Removal deletes league-specific membership, picks, claims, proposals, proposal responses, and standings.
+- If the user has no other league memberships, their Cognito user is deleted so a later invite creates a fresh account.
+
+## DynamoDB Model
+
+Single table: `pickem-bot-v1-run2-table`
+
+Important item families:
 
 - `APP_LEAGUE` / `LEAGUE#{leagueId}`: app league metadata.
 - `LEAGUE#{leagueId}` / `MEMBER#{userId}`: league membership and league-scoped role.
-- `LEAGUE#{leagueId}#WEEK#{seasonId}#{weekId}` / `META`: week metadata, cutoff timestamp, and NFL/NCAAF quotas.
-- `LEAGUE#{leagueId}#WEEK#{seasonId}#{weekId}` / `GAME#{gameId}`: imported or manually added game.
-- `GAME#{gameId}` / `OPENING_LINE#{market}`: immutable Tuesday opening line.
-- `USER#{userId}` / `PROFILE`: user profile and display name.
-- `OPTIONS#{leagueId}#{seasonId}#{weekId}` / `OPTION#{optionId}`: claimable spread or team-total pick option.
-- `CLAIM#{leagueId}#{seasonId}#{weekId}` / `OPTION#{optionId}`: exact-option claim used for uniqueness.
-- `PICK#{leagueId}#{seasonId}#{weekId}` / `USER#{userId}#OPTION#{optionId}`: player pick.
-- `STANDINGS#{leagueId}#{seasonId}` / `USER#{userId}`: league season aggregate.
-- `SCRAPE#{seasonId}#{weekId}` / `RUN#{timestamp}`: scrape metadata and errors.
+- `LEAGUE#{leagueId}#WEEK#{seasonId}#{weekId}` / `META`: weekly settings, cutoff, scrape status.
+- `SOURCE#WEEK#{seasonId}#{weekId}` / `GAME#{gameId}`: shared scraped games available to all leagues.
+- `LEAGUE#{leagueId}#WEEK#{seasonId}#{weekId}` / `GAME#{gameId}`: league-specific manual game overrides/additions.
+- `GAME#{gameId}` / `OPENING_LINE#{market}`: immutable opening odds.
+- `OPTIONS#{leagueId}#{seasonId}#{weekId}` / `OPTION#{optionId}`: optional persisted pick options.
+- `PICK#{leagueId}#{seasonId}#{weekId}` / `USER#{userId}#OPTION#{optionId}`: legacy player picks.
+- `CLAIM#{leagueId}#{seasonId}#{weekId}` / `OPTION#{optionId}`: legacy exact-option claims.
+- `PROPOSAL#{leagueId}#{seasonId}#{weekId}` / `PROPOSER#{userId}#PROPOSAL#{proposalId}`: member/admin proposed lines.
+- `PROPOSAL_RESPONSE#{leagueId}#{seasonId}#{weekId}` / `PROPOSAL#{proposalId}#RESPONDER#{userId}`: with/against responses.
+- `STANDINGS#{leagueId}#{seasonId}` / `USER#{userId}`: standings rows.
+- `SCRAPE#{seasonId}#{weekId}` / `RUN#{runId}`: scrape run metadata.
 
-Opening lines must be immutable after creation. Admin corrections create an audit field such as `source: "admin_override"` and preserve the original scraped payload when available.
+Opening lines are first-write-wins and must not be overwritten by later scrapes.
 
 ## DraftKings Scraper
 
-The scraper targets public DraftKings pages for NFL and NCAAF odds and extracts:
+The scraper stores normalized and raw-ish DraftKings odds where available:
 
-- League
-- Game date/time
-- Away team
-- Home team
-- Spread line and price
-- Source URL
-- Scrape timestamp
+- spread points and prices,
+- team totals and over/under prices,
+- game totals and over/under prices,
+- moneyline prices,
+- source URL,
+- captured timestamp,
+- DraftKings market identifiers when found,
+- warnings/errors and parsed counts.
 
-Rules:
+Scraper behavior:
 
-- Run only Tuesday mornings during football season.
-- Do not scrape closing lines or refresh odds later in the week.
-- Do not overwrite existing opening-line records for the same week.
-- Preserve partial successes if one league or page fails.
-- Log source URL, status, parsed game count, and error details.
-- Admin review is the fallback for missing games or broken parsing.
+- It writes shared source games and opening-line records.
+- It preserves partial successes.
+- It does not overwrite existing opening-line items.
+- Admin review/manual correction remains the fallback for missing markets.
 
-Scraping must respect applicable site terms, avoid private or authenticated pages, and use conservative request rates.
+## AWS Deployment
 
-## Pick Lock
+Active deployment:
 
-Each week has a cutoff timestamp. The default is Friday 10:00 AM America/Chicago.
+- Account: `390844781259`
+- Region: `us-east-1`
+- Stack: `PickemBotV1Run2Stack`
+- API: `https://79a2jlbjgc.execute-api.us-east-1.amazonaws.com`
+- Amplify: `https://master.d16nzdj1k2k1wu.amplifyapp.com`
 
-Players cannot create, edit, or delete picks after cutoff. Admins can still view picks and correct games, lines, and results after cutoff.
+AWS services:
 
-## AWS Deployment Blueprint
-
-1. Create or choose an AWS account and region.
-2. Configure AWS Budgets with a low monthly alert threshold.
-3. Install local prerequisites: Node.js, npm, AWS CLI, and AWS CDK.
-4. Run `npm install`.
-5. Bootstrap CDK: `npx cdk bootstrap`.
-6. Deploy backend infrastructure: `npm run cdk:deploy`.
-7. Add environment variables for frontend:
-   - `NEXT_PUBLIC_API_BASE_URL`
-   - `NEXT_PUBLIC_COGNITO_USER_POOL_ID`
-   - `NEXT_PUBLIC_COGNITO_CLIENT_ID`
-   - `NEXT_PUBLIC_AWS_REGION`
-8. Connect the repo to AWS Amplify Hosting and deploy the Next.js app.
-9. Store configurable scrape URLs, timezone, and season settings in SSM Parameter Store or environment variables.
-10. Monitor CloudWatch logs and alarms for API failures, scraper failures, and unusual traffic.
+- Amplify Hosting for frontend.
+- Cognito user pool and groups.
+- API Gateway HTTP API.
+- Lambda API, scraper, scheduler, and results handlers.
+- DynamoDB on-demand table with point-in-time recovery, deletion protection, and retain policy.
+- EventBridge schedules.
+- Secrets Manager secret `pickem-bot-v1-run2-github-pat`.
+- CloudWatch log groups with retention.
 
 Cost controls:
 
-- Use DynamoDB on-demand for low traffic.
-- Use API Gateway HTTP API instead of REST API.
-- Use Lambda and scheduled jobs instead of always-on servers.
-- Avoid NAT Gateway, RDS, EC2, and always-on containers in v1.
-- Disable schedules outside football season.
+- No RDS, EC2, NAT Gateway, or always-on containers.
+- DynamoDB uses pay-per-request capacity.
+- Scraper is invoked only when due weeks are pending.
+- API Gateway throttling is configured.
+
+Deployment commands:
+
+```bash
+npm run cdk:synth
+npm run cdk:deploy
+```
+
+Amplify is included by default. It is disabled only when `ENABLE_AMPLIFY=false`.
 
 ## Local Development
 
 ```bash
 npm install
 npm run dev
+npm run typecheck
 npm test
+npm run build
 ```
 
-Scraper local setup:
+Seed dummy data:
+
+```bash
+npm run seed:dummy
+```
+
+Run the legacy Python scraper locally:
 
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
-pip install "scrapling[fetchers]"
-python scraper/draftkings_scraper.py
+pip install -r scraper/requirements.txt
+npm run scraper:local
 ```
 
 ## Test Plan
 
-- Tuesday scraper creates opening lines once for a week.
-- Re-running scraper for the same week does not overwrite opening lines.
-- DraftKings NFL and NCAAF spreads normalize into consistent game records.
-- Exact pick options cannot be claimed by two users in the same league.
-- A user can release or replace an option before cutoff.
-- Players can submit and edit weekly picks before Friday 10:00 AM America/Chicago.
-- Players cannot create, edit, or delete weekly picks after Friday 10:00 AM America/Chicago.
-- Results grading uses stored opening lines, not later odds.
-- Weekly and season standings aggregate wins/losses/pushes correctly.
-- Unauthorized users cannot access admin routes.
+Automated checks:
+
+- `npm run typecheck`
+- `npm test`
+- `npm run build`
+- `npm run cdk:synth`
+
+Covered behavior includes:
+
+- weekly cutoff and scrape timing,
+- proposal quotas by sport,
+- response result inversion,
+- game-total grading,
+- pick option generation,
+- password policy validation,
+- quota input parsing,
+- member-removal authorization.
+
+Manual verification:
+
+- `/login` works and new-password feedback is clear.
+- `/` shows league switcher, sport filter, game board, proposals, and responses.
+- `/admin` can invite/remove members, change settings, and select admin board lines.
+- `/standings` loads for the selected league.
+- API `/health` returns `{"ok":true}`.
 
 ## Assumptions
 
-- DraftKings public pages are the sole odds source for v1.
-- Tuesday morning opening lines are the official league lines.
-- Friday 10:00 AM America/Chicago is the default weekly pick cutoff.
-- Scraper failures are handled by admin review/manual correction.
-- The app is for a small private friend group and does not include real-money wagering, payments, or public betting features.
+- “League” means an app group like friends/family; football category is `sportLeague`.
+- DraftKings public pages are the sole odds source.
+- The app is for private entertainment only and does not include real-money wagering or payments.
+- Team logos are mapped for seeded teams with fallback initials for unknown teams.
+- Existing run2 AWS resources are the active deployment target.
