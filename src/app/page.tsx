@@ -3,10 +3,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { AppShell } from "../components/AppShell";
 import { GameOddsBoard } from "../components/GameOddsBoard";
-import { apiGet, apiSend, AppLeague, GameWithOptions, LineProposal, PickClaim, PickOption, ProposalResponse, ProposalResponseStance, ProposalSummary, Week, weekQuery } from "../lib/api";
+import { apiGet, apiSend, AppLeague, GameWithOptions, LineProposal, PickClaim, PickOption, ProposalResponse, ProposalResponseStance, ProposalSummary, SportLeague, Week, weekQuery } from "../lib/api";
 import { getPreferredLeagueId, persistPreferredLeagueId } from "../lib/leaguePreference";
 
 type Tab = "available" | "mine" | "league";
+type SportFilter = "all" | SportLeague;
 
 export default function PlayerBoardPage() {
   const [leagues, setLeagues] = useState<AppLeague[]>([]);
@@ -20,6 +21,7 @@ export default function PlayerBoardPage() {
   const [userProposalResponses, setUserProposalResponses] = useState<ProposalResponse[]>([]);
   const [summary, setSummary] = useState<ProposalSummary>();
   const [tab, setTab] = useState<Tab>("available");
+  const [sportFilter, setSportFilter] = useState<SportFilter>("all");
   const [replaceProposalId, setReplaceProposalId] = useState<string>();
   const [status, setStatus] = useState("Loading leagues...");
 
@@ -151,6 +153,10 @@ export default function PlayerBoardPage() {
   const gamesById = new Map(games.map((game) => [game.gameId, game]));
   const userResponseByProposal = new Map(userProposalResponses.map((response) => [response.proposalId, response]));
   const otherProposals = proposals.filter((proposal) => proposal.proposalSource === "admin_selected" || !userProposals.some((userProposal) => userProposal.proposalId === proposal.proposalId));
+  const filteredGames = filterBySport(games, sportFilter);
+  const filteredUserProposals = filterBySport(userProposals, sportFilter);
+  const filteredOtherProposals = filterBySport(otherProposals, sportFilter);
+  const emptySportLabel = sportEmptyLabel(sportFilter);
 
   return (
     <AppShell>
@@ -193,10 +199,23 @@ export default function PlayerBoardPage() {
 
         {status ? <div className="mb-4 rounded border border-ink/10 bg-white p-3 text-sm">{status}</div> : null}
 
-        <div className="mb-5 flex gap-2">
-          <button className={tabClass(tab === "available")} onClick={() => setTab("available")}>Available Games</button>
-          <button className={tabClass(tab === "mine")} onClick={() => setTab("mine")}>My Picks</button>
-          <button className={tabClass(tab === "league")} onClick={() => setTab("league")}>League Picks</button>
+        <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+          <div className="flex gap-2">
+            <button className={tabClass(tab === "available")} onClick={() => setTab("available")}>Available Games</button>
+            <button className={tabClass(tab === "mine")} onClick={() => setTab("mine")}>My Picks</button>
+            <button className={tabClass(tab === "league")} onClick={() => setTab("league")}>League Picks</button>
+          </div>
+          <div className="flex rounded border border-ink/15 bg-white p-1 shadow-sm">
+            {(["all", "NFL", "NCAAF"] as SportFilter[]).map((filter) => (
+              <button
+                key={filter}
+                className={sportFilterClass(sportFilter === filter)}
+                onClick={() => setSportFilter(filter)}
+              >
+                {sportFilterLabel(filter)}
+              </button>
+            ))}
+          </div>
         </div>
 
         {tab === "available" ? (
@@ -206,7 +225,7 @@ export default function PlayerBoardPage() {
                 This league uses admin-selected lines. Review available games here, then use League Picks to choose with or against.
               </div>
             ) : null}
-            {games.map((game) => (
+            {filteredGames.map((game) => (
               <GameOddsBoard
                 key={game.gameId}
                 game={game}
@@ -217,11 +236,11 @@ export default function PlayerBoardPage() {
                 onPick={pickMode === "admin_selected" ? undefined : proposeOption}
               />
             ))}
-            {!games.length && !status ? <div className="rounded border border-ink/10 bg-white p-6">No games are available for this league week yet.</div> : null}
+            {!filteredGames.length && !status ? <div className="rounded border border-ink/10 bg-white p-6">No {emptySportLabel}games are available for this league week yet.</div> : null}
           </div>
         ) : tab === "mine" ? (
           <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
-            {userProposals.map((proposal) => (
+            {filteredUserProposals.map((proposal) => (
               <article key={proposal.proposalId} className={`rounded border bg-white p-4 ${replaceProposalId === proposal.proposalId ? "border-gold ring-2 ring-gold/30" : "border-ink/10"}`}>
                 <div className="text-xs font-bold text-turf">{proposal.sportLeague}</div>
                 <h2 className="mt-1 font-semibold">{proposal.team}</h2>
@@ -237,11 +256,11 @@ export default function PlayerBoardPage() {
                 </div>
               </article>
             ))}
-            {!userProposals.length ? <div className="rounded border border-ink/10 bg-white p-6 text-ink/60">{pickMode === "admin_selected" ? "This league uses admin-selected lines, so you do not need to propose your own lines." : "You have not proposed any lines yet."}</div> : null}
+            {!filteredUserProposals.length ? <div className="rounded border border-ink/10 bg-white p-6 text-ink/60">{pickMode === "admin_selected" ? `This league uses admin-selected lines, so you do not need to propose your own ${emptySportLabel}lines.` : `You have not proposed any ${emptySportLabel}lines yet.`}</div> : null}
           </div>
         ) : (
           <div className="grid gap-3 md:grid-cols-2">
-            {otherProposals.map((proposal) => {
+            {filteredOtherProposals.map((proposal) => {
               const response = userResponseByProposal.get(proposal.proposalId);
               return (
                 <article key={proposal.proposalId} className="rounded border border-ink/15 bg-white p-4 shadow-sm ring-1 ring-ink/5">
@@ -272,7 +291,7 @@ export default function PlayerBoardPage() {
                 </article>
               );
             })}
-            {!otherProposals.length ? <div className="rounded border border-ink/10 bg-white p-6 text-ink/60">No league members have proposed lines yet.</div> : null}
+            {!filteredOtherProposals.length ? <div className="rounded border border-ink/10 bg-white p-6 text-ink/60">No {emptySportLabel}league picks are available yet.</div> : null}
           </div>
         )}
       </section>
@@ -292,6 +311,31 @@ function Quota({ label, submitted, required }: { label: string; submitted: numbe
 
 function tabClass(active: boolean): string {
   return `rounded px-4 py-2 text-sm font-semibold ${active ? "bg-ink text-white" : "border border-ink/15 bg-white text-ink"}`;
+}
+
+function sportFilterClass(active: boolean): string {
+  return `rounded px-3 py-1.5 text-sm font-semibold transition ${active ? "bg-ink text-white" : "text-ink/65 hover:bg-ink/5 hover:text-ink"}`;
+}
+
+function sportFilterLabel(filter: SportFilter): string {
+  if (filter === "NCAAF") {
+    return "NCAA";
+  }
+  if (filter === "NFL") {
+    return "NFL";
+  }
+  return "All";
+}
+
+function sportEmptyLabel(filter: SportFilter): string {
+  return filter === "all" ? "" : `${sportFilterLabel(filter)} `;
+}
+
+function filterBySport<T extends { sportLeague: SportLeague }>(items: T[], filter: SportFilter): T[] {
+  if (filter === "all") {
+    return items;
+  }
+  return items.filter((item) => item.sportLeague === filter);
 }
 
 function formatMarket(proposal: LineProposal): string {
