@@ -19,7 +19,7 @@ export class PickemStack extends Stack {
     super(scope, id, props);
     const resourcePrefix = "pickem-bot-v1-run2";
     const firstAdminEmail = process.env.FIRST_ADMIN_EMAIL;
-    const enableAmplify = process.env.ENABLE_AMPLIFY === "true";
+    const enableAmplify = process.env.ENABLE_AMPLIFY !== "false";
     const corsAllowedOrigins = (process.env.CORS_ALLOWED_ORIGINS ?? "https://master.d16nzdj1k2k1wu.amplifyapp.com,https://master.d3j7zlwjnm04rp.amplifyapp.com,https://master.d3v9lgp3ju9tca.amplifyapp.com")
       .split(",")
       .map((origin) => origin.trim())
