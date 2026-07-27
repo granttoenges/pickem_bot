@@ -3,6 +3,7 @@
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 import { completeNewPassword, login } from "../../lib/auth";
+import { friendlyPasswordError, isValidPassword, passwordRequirements } from "../../lib/passwordPolicy";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -11,6 +12,8 @@ export default function LoginPage() {
   const [newPassword, setNewPassword] = useState("");
   const [needsNewPassword, setNeedsNewPassword] = useState(false);
   const [status, setStatus] = useState("");
+  const requirements = passwordRequirements(newPassword);
+  const canSetPassword = isValidPassword(newPassword);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -30,12 +33,16 @@ export default function LoginPage() {
 
   async function submitNewPassword(event: FormEvent) {
     event.preventDefault();
+    if (!canSetPassword) {
+      setStatus("Password does not meet the requirements below.");
+      return;
+    }
     setStatus("Setting password...");
     try {
       const session = await completeNewPassword(newPassword, email);
       router.push(session.groups.includes("admin") ? "/admin" : "/");
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : "Could not set new password.");
+      setStatus(friendlyPasswordError(error));
     }
   }
 
@@ -48,7 +55,7 @@ export default function LoginPage() {
           <>
             <label className="mt-6 block text-sm font-semibold" htmlFor="email">Email</label>
             <input id="email" className="mt-2 w-full rounded border border-white/20 bg-white px-3 py-2 text-ink" value={email} onChange={(event) => setEmail(event.target.value)} />
-            <label className="mt-4 block text-sm font-semibold" htmlFor="password">Temporary password</label>
+            <label className="mt-4 block text-sm font-semibold" htmlFor="password">Password</label>
             <input id="password" type="password" className="mt-2 w-full rounded border border-white/20 bg-white px-3 py-2 text-ink" value={password} onChange={(event) => setPassword(event.target.value)} />
             <button className="mt-6 w-full rounded bg-gold px-4 py-2 font-semibold text-ink">Sign in</button>
           </>
@@ -56,7 +63,17 @@ export default function LoginPage() {
           <>
             <label className="mt-6 block text-sm font-semibold" htmlFor="newPassword">New password</label>
             <input id="newPassword" type="password" className="mt-2 w-full rounded border border-white/20 bg-white px-3 py-2 text-ink" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} />
-            <button className="mt-6 w-full rounded bg-gold px-4 py-2 font-semibold text-ink">Set password</button>
+            <div className="mt-3 rounded border border-white/15 bg-white/5 p-3 text-xs text-chalk/75">
+              <p className="font-semibold text-chalk">Password requirements</p>
+              <ul className="mt-2 space-y-1">
+                {requirements.map((requirement) => (
+                  <li key={requirement.id} className={requirement.met ? "text-gold" : "text-chalk/70"}>
+                    {requirement.met ? "Met: " : "Needed: "}{requirement.label}
+                  </li>
+                ))}
+              </ul>
+            </div>
+            <button className="mt-6 w-full rounded bg-gold px-4 py-2 font-semibold text-ink disabled:bg-white/20 disabled:text-chalk/45" disabled={!canSetPassword}>Set password</button>
           </>
         )}
         {status ? <p className="mt-4 text-sm text-chalk/75">{status}</p> : null}

@@ -45,11 +45,11 @@ export function GameOddsBoard({
 
       <div>
         <div>
-          <div className="grid grid-cols-[minmax(72px,1fr)_minmax(54px,68px)_minmax(96px,112px)_minmax(58px,74px)] border-b border-ink/15 bg-ink/5 px-2 py-2 text-[9px] font-extrabold uppercase tracking-wide text-ink/55 sm:grid-cols-[minmax(220px,1fr)_minmax(132px,180px)_minmax(180px,240px)_minmax(132px,180px)] sm:px-3 sm:py-3 sm:text-[11px]">
-            <span>Game</span>
-            <span className="text-center">Spread</span>
-            <span className="text-center">Team Total</span>
-            <span className="text-center">Game Total</span>
+          <div className="grid grid-cols-[minmax(74px,1fr)_minmax(50px,64px)_minmax(50px,64px)_minmax(50px,64px)_minmax(54px,70px)] border-b border-ink/15 bg-ink/5 text-[9px] font-extrabold uppercase tracking-wide text-ink/55 sm:grid-cols-[minmax(220px,1fr)_minmax(132px,180px)_minmax(90px,120px)_minmax(90px,120px)_minmax(132px,180px)] sm:text-[11px]">
+            <span className="px-2 py-2 sm:px-3 sm:py-3">Game</span>
+            <span className="px-1 py-2 text-center sm:px-3 sm:py-3">Spread</span>
+            <span className="col-span-2 px-1 py-2 text-center sm:px-3 sm:py-3">Team Total</span>
+            <span className="px-1 py-2 text-center sm:px-3 sm:py-3">Game Total</span>
           </div>
           <TeamMarketRow
             teamName={game.awayTeam}
@@ -114,16 +114,14 @@ function TeamMarketRow({
   onPick?: (option: PickOption) => void;
 }) {
   return (
-    <div className="grid min-h-[58px] grid-cols-[minmax(72px,1fr)_minmax(54px,68px)_minmax(96px,112px)_minmax(58px,74px)] items-stretch border-b border-ink/15 last:border-b-0 sm:min-h-[72px] sm:grid-cols-[minmax(220px,1fr)_minmax(132px,180px)_minmax(180px,240px)_minmax(132px,180px)]">
+    <div className="grid min-h-[58px] grid-cols-[minmax(74px,1fr)_minmax(50px,64px)_minmax(50px,64px)_minmax(50px,64px)_minmax(54px,70px)] items-stretch border-b border-ink/15 last:border-b-0 sm:min-h-[72px] sm:grid-cols-[minmax(220px,1fr)_minmax(132px,180px)_minmax(90px,120px)_minmax(90px,120px)_minmax(132px,180px)]">
       <div className="flex min-w-0 items-center gap-1 px-1.5 py-2 sm:gap-3 sm:px-3 sm:py-3">
         <TeamLogo teamName={teamName} size="sm" />
         <span className="min-w-0 truncate text-[11px] font-bold text-ink sm:text-sm">{teamName}</span>
       </div>
       <OptionCell option={spread} claimByOption={claimByOption} userOptionIds={userOptionIds} locked={locked} mode={mode} onPick={onPick} />
-      <div className="grid grid-cols-2 gap-px border-l border-ink/15 bg-ink/10 p-px">
-        <OptionCell option={over} claimByOption={claimByOption} userOptionIds={userOptionIds} locked={locked} mode={mode} onPick={onPick} compact />
-        <OptionCell option={under} claimByOption={claimByOption} userOptionIds={userOptionIds} locked={locked} mode={mode} onPick={onPick} compact />
-      </div>
+      <OptionCell option={over} claimByOption={claimByOption} userOptionIds={userOptionIds} locked={locked} mode={mode} onPick={onPick} compact />
+      <OptionCell option={under} claimByOption={claimByOption} userOptionIds={userOptionIds} locked={locked} mode={mode} onPick={onPick} compact />
       <OptionCell option={gameTotal} claimByOption={claimByOption} userOptionIds={userOptionIds} locked={locked} mode={mode} onPick={onPick} compact />
     </div>
   );
@@ -148,7 +146,7 @@ function OptionCell({
 }) {
   if (!option) {
     return (
-      <div className={`flex items-center justify-center border-l border-ink/15 bg-ink/5 px-2 text-sm font-bold text-ink/30 ${compact ? "border-l-0" : ""}`}>
+      <div className="flex items-center justify-center border-l border-ink/15 bg-ink/5 px-1 text-sm font-bold text-ink/30 sm:px-2">
         --
       </div>
     );
@@ -163,13 +161,13 @@ function OptionCell({
 
   return (
     <button
-      className={`flex min-h-[58px] flex-col items-center justify-center border-l border-ink/15 px-1 text-center transition sm:min-h-[70px] sm:px-2 ${compact ? "min-h-0 border-l-0" : ""} ${cellClass(mine, disabled, mode)}`}
+      className={`flex min-h-[58px] flex-col items-center justify-center gap-1 border-l border-ink/15 px-1 text-center transition sm:min-h-[70px] sm:px-2 ${cellClass(mine, disabled, mode)}`}
       disabled={disabled}
       type="button"
       onClick={() => onPick?.(option)}
     >
-      <span className={`${compact ? "text-[11px] sm:text-xs" : "text-xs sm:text-sm"} font-extrabold leading-tight`}>{label}</span>
-      <span className="mt-1 text-[9px] font-extrabold uppercase leading-none sm:text-[10px]">{actionLabel({ mine, claim: Boolean(claim), mode })}</span>
+      <span className={`${compact ? "text-[11px] sm:text-xs" : "text-xs sm:text-sm"} font-bold leading-none`}>{label}</span>
+      <span className="text-[9px] font-bold uppercase leading-none sm:text-[10px]">{actionLabel({ mine, claim: Boolean(claim), mode })}</span>
     </button>
   );
 }
