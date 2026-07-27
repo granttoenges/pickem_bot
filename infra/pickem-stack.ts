@@ -5,7 +5,7 @@ import { Rule, Schedule } from "aws-cdk-lib/aws-events";
 import { LambdaFunction } from "aws-cdk-lib/aws-events-targets";
 import { Runtime } from "aws-cdk-lib/aws-lambda";
 import { NodejsFunction } from "aws-cdk-lib/aws-lambda-nodejs";
-import { CfnUserPoolUser, CfnUserPoolUserToGroupAttachment, UserPool, UserPoolClient, UserPoolClientIdentityProvider, UserPoolGroup } from "aws-cdk-lib/aws-cognito";
+import { UserPool, UserPoolClient, UserPoolClientIdentityProvider, UserPoolGroup } from "aws-cdk-lib/aws-cognito";
 import { CfnStage, HttpApi, CorsHttpMethod, HttpMethod } from "aws-cdk-lib/aws-apigatewayv2";
 import { HttpLambdaIntegration } from "aws-cdk-lib/aws-apigatewayv2-integrations";
 import { HttpUserPoolAuthorizer } from "aws-cdk-lib/aws-apigatewayv2-authorizers";
@@ -18,7 +18,6 @@ export class PickemStack extends Stack {
   constructor(scope: Construct, id: string, props?: StackProps) {
     super(scope, id, props);
     const resourcePrefix = "pickem-bot-v1-run2";
-    const firstAdminEmail = process.env.FIRST_ADMIN_EMAIL;
     const enableAmplify = process.env.ENABLE_AMPLIFY !== "false";
     const corsAllowedOrigins = (process.env.CORS_ALLOWED_ORIGINS ?? "https://master.d16nzdj1k2k1wu.amplifyapp.com,https://master.d3j7zlwjnm04rp.amplifyapp.com,https://master.d3v9lgp3ju9tca.amplifyapp.com")
       .split(",")
@@ -62,12 +61,12 @@ export class PickemStack extends Stack {
       supportedIdentityProviders: [UserPoolClientIdentityProvider.COGNITO]
     });
 
-    const adminGroup = new UserPoolGroup(this, "AdminGroup", {
+    new UserPoolGroup(this, "AdminGroup", {
       userPool,
       groupName: "admin"
     });
 
-    const superAdminGroup = new UserPoolGroup(this, "SuperAdminGroup", {
+    new UserPoolGroup(this, "SuperAdminGroup", {
       userPool,
       groupName: "super_admin"
     });
@@ -76,32 +75,6 @@ export class PickemStack extends Stack {
       userPool,
       groupName: "player"
     });
-
-    if (firstAdminEmail) {
-      const firstAdmin = new CfnUserPoolUser(this, "FirstAdminUser", {
-        userPoolId: userPool.userPoolId,
-        username: firstAdminEmail,
-        desiredDeliveryMediums: ["EMAIL"],
-        userAttributes: [
-          { name: "email", value: firstAdminEmail },
-          { name: "email_verified", value: "true" }
-        ]
-      });
-
-      const adminAttachment = new CfnUserPoolUserToGroupAttachment(this, "FirstAdminGroupAttachment", {
-        userPoolId: userPool.userPoolId,
-        groupName: "admin",
-        username: firstAdmin.ref
-      });
-      adminAttachment.node.addDependency(adminGroup);
-
-      const superAdminAttachment = new CfnUserPoolUserToGroupAttachment(this, "FirstSuperAdminGroupAttachment", {
-        userPoolId: userPool.userPoolId,
-        groupName: "super_admin",
-        username: firstAdmin.ref
-      });
-      superAdminAttachment.node.addDependency(superAdminGroup);
-    }
 
     const apiFunction = new NodejsFunction(this, "PickemApiFunction", {
       runtime: Runtime.NODEJS_22_X,

@@ -14,6 +14,7 @@
     "cdk:bootstrap:v1": "cdk bootstrap aws://390844781259/us-east-1 --toolkit-stack-name PickemBotV1CdkToolkit --qualifier pckmv1",
     "cdk:synth": "cdk synth",
     "cdk:deploy": "cdk deploy PickemBotV1Run2Stack --require-approval never",
+    "bootstrap:super-admin": "node scripts/bootstrap-super-admin.cjs",
     "scraper:local": "python3 scraper/draftkings_scraper.py",
     "seed:dummy": "node scripts/seed-dummy-data.cjs"
   },

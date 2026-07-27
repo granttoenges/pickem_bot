@@ -36,7 +36,8 @@ Only update active run2 resources unless the user explicitly says otherwise. Do 
   - Use `ENABLE_AMPLIFY=false` only when intentionally excluding Amplify.
 - Do not pass `GITHUB_PAT` on the command line.
 - The CDK stack references the named Secrets Manager secret instead of using a CloudFormation PAT parameter.
-- `FIRST_ADMIN_EMAIL` is still read by CDK for the stack-managed first admin user.
+- CDK must not create or manage real Cognito users. Use `npm run bootstrap:super-admin` for super admin creation/recovery.
+- Do not use `admin-reset-user-password` for the app login flow unless a reset-code UI has been implemented; use the temporary-password resend flow instead.
 - `npm run build` may need elevated local port permissions in restricted Codex sandboxes because Next/Turbopack binds a helper port.
 
 ## Project Structure
@@ -107,6 +108,7 @@ npm test
 npm run build
 npm run cdk:synth
 npm run cdk:deploy
+npm run bootstrap:super-admin
 npm run seed:dummy
 ```
 
@@ -154,5 +156,6 @@ Keep these files current when product or infrastructure behavior changes:
 - Use `rg` for search.
 - Use `apply_patch` for file edits.
 - Do not print secrets.
+- Do not add `AWS::Cognito::UserPoolUser` or `AWS::Cognito::UserPoolUserToGroupAttachment` resources to CDK.
 - Do not run destructive AWS or git commands unless the user explicitly asks and the scope is clear.
 - Keep AWS changes scoped to `PickemBotV1Run2Stack`.

@@ -58,7 +58,6 @@ npm run build
 Local `.env` is intentionally ignored by git. Current expected local keys:
 
 ```bash
-FIRST_ADMIN_EMAIL=grantoenges@gmail.com
 GITHUB_PAT=...
 ENABLE_AMPLIFY=true
 ```
@@ -96,6 +95,70 @@ npm run cdk:bootstrap:v1
 ```
 
 Only deploy `PickemBotV1Run2Stack`. Do not update unrelated AWS resources.
+
+## Super Admin Recovery
+
+Do not manage real human Cognito users through CDK/CloudFormation. CDK creates the user pool and groups only. If the super admin account needs to be created or repaired, use the bootstrap script or Cognito CLI directly.
+
+Create or verify the default super admin:
+
+```bash
+npm run bootstrap:super-admin
+```
+
+Use a different super admin email:
+
+```bash
+SUPER_ADMIN_EMAIL=owner@example.com npm run bootstrap:super-admin
+```
+
+If the account already exists but needs a new temporary-password email:
+
+```bash
+npm run bootstrap:super-admin -- --reset-temp
+```
+
+Create the super admin user and send the temporary-password email:
+
+```bash
+aws cognito-idp admin-create-user \
+  --user-pool-id us-east-1_eYgApGW0A \
+  --username grantoenges@gmail.com \
+  --user-attributes Name=email,Value=grantoenges@gmail.com Name=email_verified,Value=true \
+  --desired-delivery-mediums EMAIL \
+  --region us-east-1
+```
+
+Add the user to the `super_admin` group:
+
+```bash
+aws cognito-idp admin-add-user-to-group \
+  --user-pool-id us-east-1_eYgApGW0A \
+  --username grantoenges@gmail.com \
+  --group-name super_admin \
+  --region us-east-1
+```
+
+If the account already exists but the password is unknown, do not use `admin-reset-user-password`; that sends a verification-code flow the app does not currently support. Instead, put the user back into the temporary-password flow and resend the invite:
+
+```bash
+pw="Temp-$(openssl rand -base64 24 | tr -dc 'A-Za-z0-9!@#%^+=' | head -c 20)aA1!"
+
+aws cognito-idp admin-set-user-password \
+  --user-pool-id us-east-1_eYgApGW0A \
+  --username grantoenges@gmail.com \
+  --password "$pw" \
+  --no-permanent \
+  --region us-east-1
+
+aws cognito-idp admin-create-user \
+  --user-pool-id us-east-1_eYgApGW0A \
+  --username grantoenges@gmail.com \
+  --user-attributes Name=email,Value=grantoenges@gmail.com Name=email_verified,Value=true \
+  --desired-delivery-mediums EMAIL \
+  --message-action RESEND \
+  --region us-east-1
+```
 
 ## Data And Seeding
 

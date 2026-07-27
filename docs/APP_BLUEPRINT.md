@@ -166,7 +166,7 @@ Active deployment:
 AWS services:
 
 - Amplify Hosting for frontend.
-- Cognito user pool and groups.
+- Cognito user pool and groups. Human Cognito users are bootstrapped with CLI/script commands, not managed by CDK/CloudFormation.
 - API Gateway HTTP API.
 - Lambda API, scraper, scheduler, and results handlers.
 - DynamoDB on-demand table with point-in-time recovery, deletion protection, and retain policy.
@@ -186,6 +186,7 @@ Deployment commands:
 ```bash
 npm run cdk:synth
 npm run cdk:deploy
+npm run bootstrap:super-admin
 ```
 
 Amplify is included by default. It is disabled only when `ENABLE_AMPLIFY=false`.
