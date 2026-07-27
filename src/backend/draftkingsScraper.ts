@@ -159,6 +159,23 @@ export function parseDraftKingsPage(
       });
     }
 
+    const gameTotal = firstNumber(event, ["gameTotal", "total", "totalPoints", "pointsTotal", "overUnder", "gameTotalPoints"]);
+    if (gameTotal !== undefined) {
+      lines.push({
+        gameId,
+        market: "game_total",
+        source: "draftkings",
+        capturedAt,
+        sourceUrl,
+        draftkingsMarketIds: marketIds,
+        gameTotal,
+        gameTotalOverOdds: firstNumber(event, ["gameTotalOverOdds", "overOdds", "overPrice", "totalOverOdds", "gameOverPrice"]),
+        gameTotalUnderOdds: firstNumber(event, ["gameTotalUnderOdds", "underOdds", "underPrice", "totalUnderOdds", "gameUnderPrice"]),
+        originalPayload: rawPayload,
+        rawPayloadTrimmed: isTrimmedPayload(rawPayload)
+      });
+    }
+
     const homeMoneyline = firstNumber(event, ["homeMoneyline", "homeMoneyLine", "homeMl", "homeOdds", "homePrice"]);
     const awayMoneyline = firstNumber(event, ["awayMoneyline", "awayMoneyLine", "awayMl", "awayOdds", "awayPrice"]);
     if (homeMoneyline !== undefined || awayMoneyline !== undefined) {

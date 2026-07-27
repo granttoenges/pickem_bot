@@ -16,6 +16,7 @@ const cognito = new CognitoIdentityProviderClient({});
 
 const defaultLeagueId = "friends";
 const superAdminEmails = new Set(["grantoenges@gmail.com"]);
+let requestOrigin: string | undefined;
 
 const createLeagueSchema = z.object({
   name: z.string().min(1).max(80)
@@ -127,6 +128,7 @@ export async function handler(event: APIGatewayProxyEventV2WithJWTAuthorizer): P
     const repository = new PickemRepository();
     const method = event.requestContext.http.method;
     const path = event.rawPath;
+    requestOrigin = event.headers.origin ?? event.headers.Origin;
 
     if (method === "GET" && path === "/health") {
       return json({ ok: true });
@@ -593,7 +595,7 @@ async function withOptions(repository: PickemRepository, games: Game[], persiste
   }));
 }
 
-function buildPickOptions(game: Game, lines: GameWithOptions["lines"]): PickOption[] {
+export function buildPickOptions(game: Game, lines: GameWithOptions["lines"]): PickOption[] {
   const base = {
     leagueId: game.leagueId,
     seasonId: game.seasonId,
@@ -603,6 +605,7 @@ function buildPickOptions(game: Game, lines: GameWithOptions["lines"]): PickOpti
   };
   const spread = lines.find((line) => line.market === "spread");
   const teamTotal = lines.find((line) => line.market === "team_total");
+  const gameTotal = lines.find((line) => line.market === "game_total");
   const options: PickOption[] = [];
 
   if (spread?.awaySpread !== undefined) {
@@ -668,6 +671,28 @@ function buildPickOptions(game: Game, lines: GameWithOptions["lines"]): PickOpti
         side: "under",
         lineValue: teamTotal.homeTeamTotal,
         label: `${game.homeTeam} under ${teamTotal.homeTeamTotal}`
+      }
+    );
+  }
+  if (gameTotal?.gameTotal !== undefined) {
+    options.push(
+      {
+        ...base,
+        optionId: `${game.gameId}-game-total-over`,
+        team: `${game.awayTeam}/${game.homeTeam}`,
+        market: "game_total",
+        side: "over",
+        lineValue: gameTotal.gameTotal,
+        label: `${game.awayTeam}/${game.homeTeam} over ${gameTotal.gameTotal}`
+      },
+      {
+        ...base,
+        optionId: `${game.gameId}-game-total-under`,
+        team: `${game.awayTeam}/${game.homeTeam}`,
+        market: "game_total",
+        side: "under",
+        lineValue: gameTotal.gameTotal,
+        label: `${game.awayTeam}/${game.homeTeam} under ${gameTotal.gameTotal}`
       }
     );
   }
@@ -908,12 +933,15 @@ function json(body: unknown, statusCode = 200): APIGatewayProxyStructuredResultV
 }
 
 function corsHeaders(): Record<string, string> {
-  const allowedOrigins = (process.env.CORS_ALLOWED_ORIGINS ?? "https://master.d3v9lgp3ju9tca.amplifyapp.com")
+  const allowedOrigins = (process.env.CORS_ALLOWED_ORIGINS ?? "https://master.d3j7zlwjnm04rp.amplifyapp.com,https://master.d3v9lgp3ju9tca.amplifyapp.com")
     .split(",")
     .map((origin) => origin.trim())
     .filter(Boolean);
+  const allowedOrigin = requestOrigin && allowedOrigins.includes(requestOrigin)
+    ? requestOrigin
+    : allowedOrigins[0] ?? "https://master.d3j7zlwjnm04rp.amplifyapp.com";
   return {
-    "access-control-allow-origin": allowedOrigins[0] ?? "https://master.d3v9lgp3ju9tca.amplifyapp.com",
+    "access-control-allow-origin": allowedOrigin,
     "access-control-allow-methods": "GET,POST,PUT,DELETE,OPTIONS",
     "access-control-allow-headers": "authorization,content-type"
   };

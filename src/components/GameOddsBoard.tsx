@@ -25,6 +25,8 @@ export function GameOddsBoard({
   const awayUnder = findOption(game, "away-total-under");
   const homeOver = findOption(game, "home-total-over");
   const homeUnder = findOption(game, "home-total-under");
+  const gameOver = findOption(game, "game-total-over");
+  const gameUnder = findOption(game, "game-total-under");
 
   return (
     <article className="w-full overflow-hidden rounded-md border border-ink/15 bg-white text-ink shadow-md ring-1 ring-ink/5">
@@ -43,16 +45,18 @@ export function GameOddsBoard({
 
       <div>
         <div>
-          <div className="grid grid-cols-[minmax(92px,1fr)_minmax(68px,84px)_minmax(132px,150px)] border-b border-ink/15 bg-ink/5 px-2 py-2 text-[10px] font-extrabold uppercase tracking-wide text-ink/55 sm:grid-cols-[minmax(220px,1fr)_minmax(132px,180px)_minmax(180px,240px)] sm:px-3 sm:py-3 sm:text-[11px]">
+          <div className="grid grid-cols-[minmax(72px,1fr)_minmax(54px,68px)_minmax(96px,112px)_minmax(58px,74px)] border-b border-ink/15 bg-ink/5 px-2 py-2 text-[9px] font-extrabold uppercase tracking-wide text-ink/55 sm:grid-cols-[minmax(220px,1fr)_minmax(132px,180px)_minmax(180px,240px)_minmax(132px,180px)] sm:px-3 sm:py-3 sm:text-[11px]">
             <span>Game</span>
             <span className="text-center">Spread</span>
             <span className="text-center">Team Total</span>
+            <span className="text-center">Game Total</span>
           </div>
           <TeamMarketRow
             teamName={game.awayTeam}
             spread={awaySpread}
             over={awayOver}
             under={awayUnder}
+            gameTotal={gameOver}
             claimByOption={claimByOption}
             userOptionIds={userOptionIds}
             locked={locked}
@@ -64,6 +68,7 @@ export function GameOddsBoard({
             spread={homeSpread}
             over={homeOver}
             under={homeUnder}
+            gameTotal={gameUnder}
             claimByOption={claimByOption}
             userOptionIds={userOptionIds}
             locked={locked}
@@ -90,6 +95,7 @@ function TeamMarketRow({
   spread,
   over,
   under,
+  gameTotal,
   claimByOption,
   userOptionIds,
   locked,
@@ -100,6 +106,7 @@ function TeamMarketRow({
   spread?: PickOption;
   over?: PickOption;
   under?: PickOption;
+  gameTotal?: PickOption;
   claimByOption: Map<string, PickClaim>;
   userOptionIds: Set<string>;
   locked: boolean;
@@ -107,16 +114,17 @@ function TeamMarketRow({
   onPick?: (option: PickOption) => void;
 }) {
   return (
-    <div className="grid min-h-[58px] grid-cols-[minmax(92px,1fr)_minmax(68px,84px)_minmax(132px,150px)] items-stretch border-b border-ink/15 last:border-b-0 sm:min-h-[72px] sm:grid-cols-[minmax(220px,1fr)_minmax(132px,180px)_minmax(180px,240px)]">
-      <div className="flex min-w-0 items-center gap-2 px-2 py-2 sm:gap-3 sm:px-3 sm:py-3">
+    <div className="grid min-h-[58px] grid-cols-[minmax(72px,1fr)_minmax(54px,68px)_minmax(96px,112px)_minmax(58px,74px)] items-stretch border-b border-ink/15 last:border-b-0 sm:min-h-[72px] sm:grid-cols-[minmax(220px,1fr)_minmax(132px,180px)_minmax(180px,240px)_minmax(132px,180px)]">
+      <div className="flex min-w-0 items-center gap-1 px-1.5 py-2 sm:gap-3 sm:px-3 sm:py-3">
         <TeamLogo teamName={teamName} size="sm" />
-        <span className="min-w-0 truncate text-xs font-bold text-ink sm:text-sm">{teamName}</span>
+        <span className="min-w-0 truncate text-[11px] font-bold text-ink sm:text-sm">{teamName}</span>
       </div>
       <OptionCell option={spread} claimByOption={claimByOption} userOptionIds={userOptionIds} locked={locked} mode={mode} onPick={onPick} />
       <div className="grid grid-cols-2 gap-px border-l border-ink/15 bg-ink/10 p-px">
         <OptionCell option={over} claimByOption={claimByOption} userOptionIds={userOptionIds} locked={locked} mode={mode} onPick={onPick} compact />
         <OptionCell option={under} claimByOption={claimByOption} userOptionIds={userOptionIds} locked={locked} mode={mode} onPick={onPick} compact />
       </div>
+      <OptionCell option={gameTotal} claimByOption={claimByOption} userOptionIds={userOptionIds} locked={locked} mode={mode} onPick={onPick} compact />
     </div>
   );
 }

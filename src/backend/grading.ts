@@ -30,6 +30,20 @@ function gradeSelection<T extends PlayerPick | LineProposal>(game: Game, line: O
     return { ...pick, result: "push" };
   }
 
+  if (pick.market === "game_total") {
+    if (line.gameTotal === undefined) {
+      throw new Error("Missing game total.");
+    }
+    const combinedScore = game.homeScore + game.awayScore;
+    if (combinedScore > line.gameTotal) {
+      return { ...pick, result: pick.side === "over" ? "win" : "loss" };
+    }
+    if (combinedScore < line.gameTotal) {
+      return { ...pick, result: pick.side === "under" ? "win" : "loss" };
+    }
+    return { ...pick, result: "push" };
+  }
+
   const opponentScore = selectedIsHome ? game.awayScore : game.homeScore;
   const spread = selectedIsHome ? line.homeSpread : line.awaySpread;
   if (spread === undefined) {

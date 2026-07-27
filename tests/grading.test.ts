@@ -74,6 +74,24 @@ describe("gradePick", () => {
     ).result).toBe("win");
   });
 
+  it("grades game total picks against the stored opening line", () => {
+    expect(gradePick(
+      game,
+      { ...spreadLine, market: "game_total", gameTotal: 43.5 },
+      { ...basePick, optionId: "game-1-game-total-over", team: "Green Bay/Chicago", market: "game_total", side: "over", lineValue: 43.5 }
+    ).result).toBe("win");
+    expect(gradePick(
+      game,
+      { ...spreadLine, market: "game_total", gameTotal: 44.5 },
+      { ...basePick, optionId: "game-1-game-total-under", team: "Green Bay/Chicago", market: "game_total", side: "under", lineValue: 44.5 }
+    ).result).toBe("win");
+    expect(gradePick(
+      game,
+      { ...spreadLine, market: "game_total", gameTotal: 44 },
+      { ...basePick, optionId: "game-1-game-total-under", team: "Green Bay/Chicago", market: "game_total", side: "under", lineValue: 44 }
+    ).result).toBe("push");
+  });
+
   it("grades proposed lines against the stored opening line", () => {
     expect(gradeProposal(game, spreadLine, baseProposal).result).toBe("win");
   });

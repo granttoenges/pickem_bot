@@ -298,6 +298,9 @@ function formatMarket(proposal: LineProposal): string {
   if (proposal.market === "spread") {
     return `Spread ${proposal.lineValue > 0 ? `+${proposal.lineValue}` : proposal.lineValue}`;
   }
+  if (proposal.market === "game_total") {
+    return `Game total ${proposal.side} ${proposal.lineValue}`;
+  }
   return `Team total ${proposal.side} ${proposal.lineValue}`;
 }
 

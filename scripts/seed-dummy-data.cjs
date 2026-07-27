@@ -14,21 +14,21 @@ const dynamo = DynamoDBDocumentClient.from(new DynamoDBClient({}));
 const cognito = new CognitoIdentityProviderClient({});
 
 const nflGames = [
-  ["Packers", "Bears", -1.5, 22.5, 21.5],
-  ["Chiefs", "Broncos", -4.5, 26.5, 19.5],
-  ["Cowboys", "Eagles", 3.5, 20.5, 24.5],
-  ["Bills", "Jets", -6.5, 25.5, 18.5],
-  ["Ravens", "Steelers", -2.5, 23.5, 20.5],
-  ["49ers", "Seahawks", -3.5, 24.5, 21.5]
+  ["Packers", "Bears", -1.5, 22.5, 21.5, 44.0],
+  ["Chiefs", "Broncos", -4.5, 26.5, 19.5, 46.0],
+  ["Cowboys", "Eagles", 3.5, 20.5, 24.5, 45.0],
+  ["Bills", "Jets", -6.5, 25.5, 18.5, 44.0],
+  ["Ravens", "Steelers", -2.5, 23.5, 20.5, 44.0],
+  ["49ers", "Seahawks", -3.5, 24.5, 21.5, 46.0]
 ];
 
 const ncaafGames = [
-  ["Ohio State", "Michigan", -2.5, 28.5, 25.5],
-  ["Georgia", "Alabama", 1.5, 24.5, 26.5],
-  ["Texas", "Oklahoma", -4.5, 30.5, 24.5],
-  ["Notre Dame", "USC", -3.5, 27.5, 23.5],
-  ["LSU", "Florida", -6.5, 31.5, 22.5],
-  ["Penn State", "Oregon", 2.5, 24.5, 27.5]
+  ["Ohio State", "Michigan", -2.5, 28.5, 25.5, 54.0],
+  ["Georgia", "Alabama", 1.5, 24.5, 26.5, 51.0],
+  ["Texas", "Oklahoma", -4.5, 30.5, 24.5, 55.0],
+  ["Notre Dame", "USC", -3.5, 27.5, 23.5, 51.0],
+  ["LSU", "Florida", -6.5, 31.5, 22.5, 54.0],
+  ["Penn State", "Oregon", 2.5, 24.5, 27.5, 52.0]
 ];
 
 async function main() {
@@ -43,7 +43,8 @@ async function main() {
     name: "Friends Pickem",
     createdBy: adminUserId,
     createdAt: now,
-    status: "active"
+    status: "active",
+    pickMode: "member_proposed"
   });
 
   await put(`LEAGUE#${leagueId}`, `MEMBER#${adminUserId}`, {
@@ -76,7 +77,7 @@ async function main() {
 }
 
 async function seedGames(sportLeague, rows, kickoffAt) {
-  for (const [index, [awayTeam, homeTeam, homeSpread, awayTotal, homeTotal]] of rows.entries()) {
+  for (const [index, [awayTeam, homeTeam, homeSpread, awayTotal, homeTotal, gameTotal]] of rows.entries()) {
     const gameId = `${sportLeague.toLowerCase()}-${index + 1}-${awayTeam}-${homeTeam}`.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
     const game = {
       leagueId,
@@ -110,14 +111,22 @@ async function seedGames(sportLeague, rows, kickoffAt) {
       awayTeamTotal: awayTotal,
       homeTeamTotal: homeTotal
     });
+    await put(`GAME#${gameId}`, "OPENING_LINE#game_total", {
+      entityType: "OpeningLine",
+      gameId,
+      market: "game_total",
+      source: "seed",
+      capturedAt: now,
+      gameTotal
+    });
 
-    for (const option of buildOptions(game, -homeSpread, homeSpread, awayTotal, homeTotal)) {
+    for (const option of buildOptions(game, -homeSpread, homeSpread, awayTotal, homeTotal, gameTotal)) {
       await put(`OPTIONS#${leagueId}#${seasonId}#${weekId}`, `OPTION#${option.optionId}`, { entityType: "PickOption", ...option });
     }
   }
 }
 
-function buildOptions(game, awaySpread, homeSpread, awayTotal, homeTotal) {
+function buildOptions(game, awaySpread, homeSpread, awayTotal, homeTotal, gameTotal) {
   const base = {
     leagueId,
     seasonId,
@@ -131,7 +140,9 @@ function buildOptions(game, awaySpread, homeSpread, awayTotal, homeTotal) {
     { ...base, optionId: `${game.gameId}-away-total-over`, team: game.awayTeam, market: "team_total", side: "over", lineValue: awayTotal, label: `${game.awayTeam} over ${awayTotal}` },
     { ...base, optionId: `${game.gameId}-away-total-under`, team: game.awayTeam, market: "team_total", side: "under", lineValue: awayTotal, label: `${game.awayTeam} under ${awayTotal}` },
     { ...base, optionId: `${game.gameId}-home-total-over`, team: game.homeTeam, market: "team_total", side: "over", lineValue: homeTotal, label: `${game.homeTeam} over ${homeTotal}` },
-    { ...base, optionId: `${game.gameId}-home-total-under`, team: game.homeTeam, market: "team_total", side: "under", lineValue: homeTotal, label: `${game.homeTeam} under ${homeTotal}` }
+    { ...base, optionId: `${game.gameId}-home-total-under`, team: game.homeTeam, market: "team_total", side: "under", lineValue: homeTotal, label: `${game.homeTeam} under ${homeTotal}` },
+    { ...base, optionId: `${game.gameId}-game-total-over`, team: `${game.awayTeam}/${game.homeTeam}`, market: "game_total", side: "over", lineValue: gameTotal, label: `${game.awayTeam}/${game.homeTeam} over ${gameTotal}` },
+    { ...base, optionId: `${game.gameId}-game-total-under`, team: `${game.awayTeam}/${game.homeTeam}`, market: "game_total", side: "under", lineValue: gameTotal, label: `${game.awayTeam}/${game.homeTeam} under ${gameTotal}` }
   ];
 }
 

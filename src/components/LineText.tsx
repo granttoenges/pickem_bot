@@ -19,6 +19,13 @@ export function LineText({ game, market }: { game: GameWithOptions; market: Mark
       </span>
     );
   }
+  if (market === "game_total") {
+    return (
+      <span>
+        Game total {formatSpread(line.gameTotal)}
+      </span>
+    );
+  }
   return (
     <span>
       {game.awayTeam} total {formatSpread(line.awayTeamTotal)} / {game.homeTeam} total {formatSpread(line.homeTeamTotal)}

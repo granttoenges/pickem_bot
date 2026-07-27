@@ -2,7 +2,7 @@ export type SportLeague = "NFL" | "NCAAF";
 export type AppLeagueStatus = "active" | "archived";
 export type LeagueMemberRole = "league_admin" | "player";
 export type PickMode = "member_proposed" | "admin_selected";
-export type Market = "spread" | "team_total" | "moneyline";
+export type Market = "spread" | "team_total" | "game_total" | "moneyline";
 export type PickSide = "home" | "away" | "over" | "under";
 export type PickResult = "win" | "loss" | "push" | "pending";
 export type ProposalResponseStance = "with" | "against";
@@ -72,6 +72,9 @@ export interface OpeningLine {
   homeTeamTotalUnderOdds?: number;
   awayTeamTotalOverOdds?: number;
   awayTeamTotalUnderOdds?: number;
+  gameTotal?: number;
+  gameTotalOverOdds?: number;
+  gameTotalUnderOdds?: number;
   homeMoneyline?: number;
   awayMoneyline?: number;
   rawPayloadTrimmed?: boolean;

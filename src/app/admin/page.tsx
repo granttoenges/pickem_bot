@@ -367,7 +367,7 @@ export default function AdminPage() {
               {proposals.map((proposal) => (
                 <div key={proposal.proposalId} className="rounded bg-ink/5 p-3">
                   <div className="font-semibold">{proposal.team}</div>
-                  <div className="text-ink/60">{proposal.sportLeague} · {proposal.market === "spread" ? "spread" : "team total"} · {proposal.side} {proposal.lineValue} · proposed by {proposal.proposerLabel ?? proposal.proposerId} · {proposal.result}</div>
+                  <div className="text-ink/60">{proposal.sportLeague} · {formatMarketName(proposal.market)} · {proposal.side} {proposal.lineValue} · proposed by {proposal.proposerLabel ?? proposal.proposerId} · {proposal.result}</div>
                 </div>
               ))}
               {!proposals.length ? <p className="text-ink/60">No lines proposed yet.</p> : null}
@@ -443,4 +443,14 @@ function fromDatetimeLocal(value: string): string {
 
 function formatDateTime(iso?: string): string {
   return iso ? new Date(iso).toLocaleString() : "not set";
+}
+
+function formatMarketName(market: LineProposal["market"]): string {
+  if (market === "spread") {
+    return "spread";
+  }
+  if (market === "game_total") {
+    return "game total";
+  }
+  return "team total";
 }
