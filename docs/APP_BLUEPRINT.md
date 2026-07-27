@@ -32,7 +32,7 @@ League mode is configured per app league.
 3. The scheduler finds pending weeks whose `scrapeAt` time has passed and invokes the DraftKings scraper.
 4. Shared weekly games and immutable opening odds are stored for all leagues.
 5. Members propose lines or admins select board lines, depending on league mode.
-6. League members respond `With` or `Against` before `cutoffAt`.
+6. Member-proposed lines automatically record the proposer as `With`; other league members respond `With` or `Against` before `cutoffAt`.
 7. Results sync grades proposals and responses against the stored opening line.
 8. Standings aggregate wins, losses, and pushes by app league.
 
@@ -51,6 +51,7 @@ Moneyline odds may be stored from DraftKings for future use, but moneyline is no
 Scoring:
 
 - Proposal owner is graded on the selected side.
+- Member proposal owners also get an automatic stored `With` response for their own proposed line.
 - `With` responses inherit the proposal result.
 - `Against` responses invert win/loss and preserve pushes.
 - Game total grading uses combined final score.

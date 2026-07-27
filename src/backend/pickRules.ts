@@ -1,4 +1,4 @@
-import type { LineProposal, PickResult, PlayerPick, ProposalResponseStance, SportLeague, Week } from "./types";
+import type { LineProposal, PickResult, PlayerPick, ProposalResponse, ProposalResponseStance, SportLeague, Week } from "./types";
 
 export function pickSummary(picks: PlayerPick[], week: Week) {
   const nfl = picks.filter((pick) => pick.sportLeague === "NFL").length;
@@ -45,4 +45,23 @@ export function responseResult(proposalResult: PickResult, stance: ProposalRespo
     return proposalResult;
   }
   return proposalResult === "win" ? "loss" : "win";
+}
+
+export function selfWithResponseForProposal(proposal: LineProposal): ProposalResponse {
+  return {
+    leagueId: proposal.leagueId,
+    seasonId: proposal.seasonId,
+    weekId: proposal.weekId,
+    proposalId: proposal.proposalId,
+    responderId: proposal.proposerId,
+    stance: "with",
+    submittedAt: proposal.submittedAt,
+    result: proposal.result
+  };
+}
+
+export function assertCanManuallyChangeProposalResponse(proposal: LineProposal, responderId: string): void {
+  if (proposal.proposalSource !== "admin_selected" && proposal.proposerId === responderId) {
+    throw new Error("You cannot respond to your own proposed line. Release the proposal instead.");
+  }
 }

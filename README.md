@@ -15,6 +15,7 @@ The app is built to run locally and deploy cheaply on AWS with serverless servic
 - Member-proposed mode:
   - admins set weekly NFL and NCAAF proposal limits separately.
   - members propose spread, team total, or game total lines.
+  - proposing a line automatically records the proposer as `With` that line.
   - other members respond `With` or `Against`.
 - Admin-selected mode:
   - league admins select exact board lines.

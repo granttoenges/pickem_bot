@@ -271,15 +271,21 @@ export default function PlayerBoardPage() {
           <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
             {filteredUserProposals.map((proposal) => {
               const game = gamesById.get(proposal.gameId);
+              const response = userResponseByProposal.get(proposal.proposalId);
               return (
                 <article key={proposal.proposalId} className={`rounded border bg-white p-4 dark:bg-zinc-900 ${replaceProposalId === proposal.proposalId ? "border-gold ring-2 ring-gold/30 dark:ring-gold/40" : "border-ink/10 dark:border-white/10"}`}>
-                  <div className="flex items-start gap-3">
-                    <ProposalLogo proposal={proposal} game={game} />
-                    <div className="min-w-0">
-                      <div className="text-xs font-bold text-turf">{proposal.sportLeague}</div>
-                      <h2 className="mt-1 font-semibold">{proposal.team}</h2>
-                      <p className="text-sm text-ink/60 dark:text-zinc-400">{formatMarket(proposal)} · {gameLabel(game)}</p>
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div className="flex min-w-0 items-start gap-3">
+                      <ProposalLogo proposal={proposal} game={game} />
+                      <div className="min-w-0">
+                        <div className="text-xs font-bold text-turf">{proposal.sportLeague}</div>
+                        <h2 className="mt-1 font-semibold">{proposal.team}</h2>
+                        <p className="text-sm text-ink/60 dark:text-zinc-400">{formatMarket(proposal)} · {gameLabel(game)}</p>
+                      </div>
                     </div>
+                    <span className="rounded bg-gold/25 px-3 py-1 text-xs font-bold uppercase text-ink dark:text-zinc-100">
+                      {response?.stance ?? "with"}
+                    </span>
                   </div>
                   <p className="mt-2 text-sm font-medium">{proposal.result}</p>
                   <div className="mt-4 flex gap-2">

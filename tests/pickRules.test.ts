@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { proposalSummary, responseResult, validateProposalQuota, pickSummary, validateQuota } from "../src/backend/pickRules";
+import { assertCanManuallyChangeProposalResponse, proposalSummary, responseResult, selfWithResponseForProposal, validateProposalQuota, pickSummary, validateQuota } from "../src/backend/pickRules";
 import type { LineProposal, PlayerPick, Week } from "../src/backend/types";
 
 const week: Week = {
@@ -106,5 +106,28 @@ describe("pick rules", () => {
     expect(responseResult("loss", "against")).toBe("win");
     expect(responseResult("push", "against")).toBe("push");
     expect(responseResult("pending", "against")).toBe("pending");
+  });
+
+  it("creates an automatic with response for the proposal owner", () => {
+    const item = proposal("a", "NFL");
+    expect(selfWithResponseForProposal(item)).toMatchObject({
+      leagueId: item.leagueId,
+      seasonId: item.seasonId,
+      weekId: item.weekId,
+      proposalId: item.proposalId,
+      responderId: item.proposerId,
+      stance: "with",
+      submittedAt: item.submittedAt,
+      result: item.result
+    });
+  });
+
+  it("blocks manual response changes for a member's own proposal", () => {
+    expect(() => assertCanManuallyChangeProposalResponse(proposal("a", "NFL"), "user-1")).toThrow("own proposed line");
+  });
+
+  it("allows manual responses to admin-selected board lines", () => {
+    const adminLine = { ...proposal("admin", "NFL"), proposerId: "LEAGUE_BOARD", proposalSource: "admin_selected" as const };
+    expect(() => assertCanManuallyChangeProposalResponse(adminLine, "user-1")).not.toThrow();
   });
 });

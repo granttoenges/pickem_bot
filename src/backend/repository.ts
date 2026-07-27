@@ -403,6 +403,10 @@ export class PickemRepository {
   }
 
   async putProposal(proposal: LineProposal, previousProposalId?: string): Promise<void> {
+    await this.putProposalWithSelfResponse(proposal, undefined, previousProposalId);
+  }
+
+  async putProposalWithSelfResponse(proposal: LineProposal, selfResponse: ProposalResponse | undefined, previousProposalId?: string): Promise<void> {
     const transactItems = [];
 
     if (previousProposalId && previousProposalId !== proposal.proposalId) {
@@ -425,6 +429,20 @@ export class PickemRepository {
         }
       }
     });
+
+    if (selfResponse) {
+      transactItems.push({
+        Put: {
+          TableName: this.tableName,
+          Item: {
+            pk: proposalResponsesPk(selfResponse.leagueId, selfResponse.seasonId, selfResponse.weekId),
+            sk: responseSk(selfResponse.proposalId, selfResponse.responderId),
+            entityType: "ProposalResponse",
+            ...selfResponse
+          }
+        }
+      });
+    }
 
     await client.send(new TransactWriteCommand({ TransactItems: transactItems }));
   }

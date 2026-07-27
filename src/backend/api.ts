@@ -10,7 +10,7 @@ import type { APIGatewayProxyEventV2WithJWTAuthorizer, APIGatewayProxyStructured
 import { z } from "zod";
 import { PickemRepository } from "./repository";
 import { assertBeforeCutoff, defaultWeeklyCutoffUtc, defaultWeeklyScrapeUtc } from "./time";
-import { pickSummary, proposalSummary, responseResult, validateProposalQuota, validateQuota } from "./pickRules";
+import { assertCanManuallyChangeProposalResponse, pickSummary, proposalSummary, responseResult, selfWithResponseForProposal, validateProposalQuota, validateQuota } from "./pickRules";
 import { applyWeekSettings } from "./weekSettingsRules";
 import { assertCanRemoveLeagueMember } from "./memberRemovalRules";
 import type { AppLeague, Game, GameWithOptions, LeagueMember, LineProposal, PickOption, PlayerPick, ProposalResponse, Week } from "./types";
@@ -480,7 +480,7 @@ export async function handler(event: APIGatewayProxyEventV2WithJWTAuthorizer): P
         submittedAt: now,
         result: "pending"
       };
-      await repository.putProposal(proposal, previousProposalId);
+      await repository.putProposalWithSelfResponse(proposal, selfWithResponseForProposal(proposal), previousProposalId);
       if (previousProposalId && previousProposalId !== proposal.proposalId) {
         const responses = await repository.listProposalResponses(body.leagueId, body.seasonId, body.weekId);
         await Promise.all(responses
@@ -531,8 +531,10 @@ export async function handler(event: APIGatewayProxyEventV2WithJWTAuthorizer): P
       if (!proposal) {
         return json({ message: "Proposal not found." }, 404);
       }
-      if (proposal.proposerId === auth.userId) {
-        return json({ message: "You cannot respond to your own proposed line." }, 409);
+      try {
+        assertCanManuallyChangeProposalResponse(proposal, auth.userId);
+      } catch (error) {
+        return json({ message: error instanceof Error ? error.message : "You cannot respond to your own proposed line." }, 409);
       }
       const response: ProposalResponse = {
         leagueId: body.leagueId,
@@ -551,11 +553,24 @@ export async function handler(event: APIGatewayProxyEventV2WithJWTAuthorizer): P
     if (method === "DELETE" && path === "/proposal-responses") {
       const body = deleteProposalResponseSchema.parse(parseBody(event));
       await requireLeagueAccess(repository, auth, body.leagueId);
-      const week = await repository.getWeek(body.leagueId, body.seasonId, body.weekId);
+      const [week, persistedProposals, picks] = await Promise.all([
+        repository.getWeek(body.leagueId, body.seasonId, body.weekId),
+        repository.listProposals(body.leagueId, body.seasonId, body.weekId),
+        repository.listPicks(body.leagueId, body.seasonId, body.weekId)
+      ]);
       if (!week) {
         return json({ message: "Week not found." }, 404);
       }
       assertBeforeCutoff(new Date(), week.cutoffAt);
+      const proposal = mergeLegacyPickProposals(persistedProposals, picks).find((item) => item.proposalId === body.proposalId);
+      if (!proposal) {
+        return json({ message: "Proposal not found." }, 404);
+      }
+      try {
+        assertCanManuallyChangeProposalResponse(proposal, auth.userId);
+      } catch (error) {
+        return json({ message: error instanceof Error ? error.message : "You cannot delete your own automatic with response." }, 409);
+      }
       await repository.deleteProposalResponse(body.leagueId, body.seasonId, body.weekId, body.proposalId, auth.userId);
       return json({ ok: true });
     }
