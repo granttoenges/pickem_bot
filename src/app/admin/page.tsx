@@ -22,6 +22,7 @@ import { appConfig } from "../../lib/config";
 import { getStoredSession, SessionState } from "../../lib/auth";
 import { getPreferredLeagueId, persistPreferredLeagueId } from "../../lib/leaguePreference";
 import { isValidQuotaInput, parseQuotaInput } from "../../lib/quotaInput";
+import { FadeContent, MagicCard, ShimmerButton } from "../../components/ui/polish";
 
 export default function AdminPage() {
   const [leagues, setLeagues] = useState<AppLeague[]>([]);
@@ -302,14 +303,14 @@ export default function AdminPage() {
   return (
     <AuthGuard>
     <AppShell>
-      <section className="mx-auto max-w-7xl px-5 py-8 md:px-8">
+      <FadeContent className="mx-auto max-w-7xl px-5 py-8 md:px-8">
         <div className="mb-6 grid gap-4 lg:grid-cols-[1fr_360px]">
           <div>
             <p className="text-sm font-semibold uppercase tracking-[0.2em] text-turf">Admin Portal</p>
             <h1 className="text-4xl font-semibold">League Control</h1>
             <p className="mt-2 text-ink/65 dark:text-zinc-400">{week ? `${week.label} · DraftKings ${formatDateTime(week.scrapeAt)} · Picks close ${formatDateTime(week.cutoffAt)}` : "Manage league settings, invites, and weekly proposed lines."}</p>
           </div>
-          <div className="rounded border border-ink/10 bg-white p-4 dark:border-white/10 dark:bg-zinc-900">
+          <MagicCard className="p-4">
             <h2 className="mb-2 font-semibold">Scraper Status</h2>
             {week ? <div className="mb-2 text-sm text-ink/70 dark:text-zinc-300">Configured status: <strong>{week.scrapeStatus ?? "pending"}</strong></div> : null}
             {scrapeRuns[0] ? (
@@ -319,13 +320,13 @@ export default function AdminPage() {
                 <div>Captured: {new Date(scrapeRuns[0].capturedAt).toLocaleString()}</div>
               </div>
             ) : <p className="text-sm text-ink/60 dark:text-zinc-400">No scrape runs stored yet.</p>}
-          </div>
+          </MagicCard>
         </div>
 
-        {status ? <div className="mb-4 rounded border border-ink/10 bg-white p-3 text-sm dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-200">{status}</div> : null}
+        {status ? <MagicCard className="mb-4 p-3 text-sm dark:text-zinc-200">{status}</MagicCard> : null}
 
         <div className="mb-6 grid gap-4 lg:grid-cols-3">
-          <div className="rounded border border-ink/10 bg-white p-4 dark:border-white/10 dark:bg-zinc-900">
+          <MagicCard className="p-4">
             <h2 className="mb-3 font-semibold">Active League</h2>
             <select
               className="w-full rounded border border-ink/20 bg-white px-3 py-2 dark:border-white/15 dark:bg-zinc-950 dark:text-zinc-100"
@@ -350,26 +351,26 @@ export default function AdminPage() {
                 {weeks.map((item) => <option key={`${item.seasonId}#${item.weekId}`} value={`${item.seasonId}#${item.weekId}`}>{item.seasonId} Week {item.weekId}</option>)}
               </select>
             ) : null}
-          </div>
-          <div className="rounded border border-ink/10 bg-white p-4 dark:border-white/10 dark:bg-zinc-900">
+          </MagicCard>
+          <MagicCard className="p-4">
             <h2 className="mb-3 font-semibold">League Actions</h2>
-            <button className="rounded bg-ink px-4 py-2 text-sm font-semibold text-white dark:bg-zinc-100 dark:text-zinc-950" onClick={() => setShowCreateLeague(true)}>
+            <ShimmerButton onClick={() => setShowCreateLeague(true)}>
               Create League
-            </button>
-          </div>
-          <form className="rounded border border-ink/10 bg-white p-4 dark:border-white/10 dark:bg-zinc-900" onSubmit={invitePlayer}>
+            </ShimmerButton>
+          </MagicCard>
+          <MagicCard as="form" className="p-4" onSubmit={invitePlayer}>
             <h2 className="mb-3 font-semibold">Invite Player</h2>
             <div className="flex gap-2">
               <input className="min-w-0 flex-1 rounded border border-ink/20 px-3 py-2 text-sm dark:border-white/15 dark:bg-zinc-950 dark:text-zinc-100" type="email" value={inviteEmail} onChange={(event) => setInviteEmail(event.target.value)} placeholder="friend@example.com" />
-              <button className="rounded bg-turf px-4 py-2 text-sm font-semibold text-white disabled:bg-turf/50" disabled={invitingPlayer}>
+              <ShimmerButton className="bg-turf text-white disabled:bg-turf/50 dark:bg-turf dark:text-white" disabled={invitingPlayer} type="submit">
                 {invitingPlayer ? "Sending..." : "Invite"}
-              </button>
+              </ShimmerButton>
             </div>
-          </form>
+          </MagicCard>
         </div>
 
         {week ? (
-          <form className="mb-6 rounded border border-ink/10 bg-white p-4 dark:border-white/10 dark:bg-zinc-900" onSubmit={saveSettings}>
+          <MagicCard as="form" className="mb-6 p-4" onSubmit={saveSettings}>
             <h2 className="mb-3 text-xl font-semibold">Weekly Settings</h2>
             <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-[220px_160px_160px_240px_240px_auto] lg:items-end">
               <label className="text-sm font-semibold">
@@ -439,15 +440,15 @@ export default function AdminPage() {
                   onChange={(event) => setCutoffAtLocal(event.target.value)}
                 />
               </label>
-              <button className="rounded bg-ink px-4 py-2 text-sm font-semibold text-white disabled:bg-ink/35 dark:bg-zinc-100 dark:text-zinc-950 dark:disabled:bg-white/20 dark:disabled:text-zinc-500" disabled={savingSettings || (pickMode !== "admin_selected" && (!isValidQuotaInput(nflQuota) || !isValidQuotaInput(ncaafQuota)))}>
+              <ShimmerButton disabled={savingSettings || (pickMode !== "admin_selected" && (!isValidQuotaInput(nflQuota) || !isValidQuotaInput(ncaafQuota)))} type="submit">
                 {savingSettings ? "Saving..." : "Save Settings"}
-              </button>
+              </ShimmerButton>
             </div>
-          </form>
+          </MagicCard>
         ) : null}
 
         <div className="mb-6 grid gap-4 lg:grid-cols-2">
-          <section className="rounded border border-ink/10 bg-white p-4 dark:border-white/10 dark:bg-zinc-900">
+          <MagicCard as="section" className="p-4">
             <h2 className="mb-3 text-xl font-semibold">Members</h2>
             <div className="space-y-2">
               {members.map((member) => (
@@ -471,9 +472,9 @@ export default function AdminPage() {
               ))}
               {!members.length ? <p className="text-sm text-ink/60 dark:text-zinc-400">No members yet.</p> : null}
             </div>
-          </section>
+          </MagicCard>
 
-          <section className="rounded border border-ink/10 bg-white p-4 dark:border-white/10 dark:bg-zinc-900">
+          <MagicCard as="section" className="p-4">
             <h2 className="mb-3 text-xl font-semibold">Proposed Lines</h2>
             <div className="grid gap-2 text-sm">
               {proposals.map((proposal) => (
@@ -484,7 +485,7 @@ export default function AdminPage() {
               ))}
               {!proposals.length ? <p className="text-ink/60 dark:text-zinc-400">No lines proposed yet.</p> : null}
             </div>
-          </section>
+          </MagicCard>
         </div>
 
         <section className="space-y-3">
@@ -530,10 +531,10 @@ export default function AdminPage() {
             </div>
           ))}
         </section>
-      </section>
+      </FadeContent>
       {showCreateLeague ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/50 px-5 dark:bg-black/70">
-          <form className="w-full max-w-md rounded border border-ink/10 bg-white p-5 shadow-xl dark:border-white/10 dark:bg-zinc-900" onSubmit={createLeague}>
+          <MagicCard as="form" className="w-full max-w-md p-5 shadow-xl" onSubmit={createLeague}>
             <div className="mb-4 flex items-center justify-between gap-3">
               <h2 className="text-xl font-semibold">Create League</h2>
               <button className="rounded px-2 py-1 text-ink/60 hover:bg-ink/5 dark:text-zinc-400 dark:hover:bg-white/10" type="button" onClick={() => setShowCreateLeague(false)}>
@@ -555,11 +556,11 @@ export default function AdminPage() {
               <button className="rounded border border-ink/20 px-4 py-2 text-sm font-semibold dark:border-white/15" disabled={creatingLeague} type="button" onClick={() => setShowCreateLeague(false)}>
                 Cancel
               </button>
-              <button className="rounded bg-ink px-4 py-2 text-sm font-semibold text-white disabled:bg-ink/35 dark:bg-zinc-100 dark:text-zinc-950 dark:disabled:bg-white/20 dark:disabled:text-zinc-500" disabled={creatingLeague || !newLeagueName.trim()}>
+              <ShimmerButton disabled={creatingLeague || !newLeagueName.trim()} type="submit">
                 {creatingLeague ? "Creating..." : "Create"}
-              </button>
+              </ShimmerButton>
             </div>
-          </form>
+          </MagicCard>
         </div>
       ) : null}
     </AppShell>

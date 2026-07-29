@@ -4,6 +4,7 @@ import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { completeNewPassword, destinationAfterLogin, getStoredSession, login } from "../../lib/auth";
 import { friendlyPasswordError, isValidPassword, passwordRequirements } from "../../lib/passwordPolicy";
+import { BorderBeam, FadeContent, MagicCard, ShimmerButton } from "../../components/ui/polish";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -58,8 +59,13 @@ export default function LoginPage() {
 
   return (
     <main className="grid min-h-screen place-items-center bg-ink px-5 text-chalk dark:bg-zinc-950">
-      <form className="w-full max-w-sm rounded border border-white/15 bg-white/10 p-6 shadow-xl dark:bg-zinc-900/80" onSubmit={needsNewPassword ? submitNewPassword : submit}>
-        <h1 className="text-3xl font-semibold">Pickem Bot</h1>
+      <FadeContent className="w-full max-w-sm">
+      <MagicCard as="form" className="relative w-full overflow-hidden border-white/15 bg-white/10 p-6 text-chalk shadow-2xl backdrop-blur dark:bg-zinc-900/85" onSubmit={needsNewPassword ? submitNewPassword : submit}>
+        <BorderBeam />
+        <div className="mb-1 flex items-center gap-2">
+          <span className="h-2.5 w-2.5 rounded-full bg-gold shadow-[0_0_18px_rgba(214,166,68,0.75)]" />
+          <h1 className="text-3xl font-semibold">Pickem Bot</h1>
+        </div>
         <p className="mt-2 text-sm text-chalk/65">Invite-only league login.</p>
         {!needsNewPassword ? (
           <>
@@ -67,7 +73,7 @@ export default function LoginPage() {
             <input id="email" className="mt-2 w-full rounded border border-white/20 bg-white px-3 py-2 text-ink dark:border-white/15 dark:bg-zinc-950 dark:text-zinc-100" value={email} onChange={(event) => setEmail(event.target.value)} />
             <label className="mt-4 block text-sm font-semibold" htmlFor="password">Password</label>
             <input id="password" type="password" className="mt-2 w-full rounded border border-white/20 bg-white px-3 py-2 text-ink dark:border-white/15 dark:bg-zinc-950 dark:text-zinc-100" value={password} onChange={(event) => setPassword(event.target.value)} />
-            <button className="mt-6 w-full rounded bg-gold px-4 py-2 font-semibold text-ink">Sign in</button>
+            <ShimmerButton className="mt-6 w-full bg-gold text-ink dark:bg-gold dark:text-ink" type="submit">Sign in</ShimmerButton>
           </>
         ) : (
           <>
@@ -83,11 +89,12 @@ export default function LoginPage() {
                 ))}
               </ul>
             </div>
-            <button className="mt-6 w-full rounded bg-gold px-4 py-2 font-semibold text-ink disabled:bg-white/20 disabled:text-chalk/45" disabled={!canSetPassword}>Set password</button>
+            <ShimmerButton className="mt-6 w-full bg-gold text-ink disabled:bg-white/20 disabled:text-chalk/45 dark:bg-gold dark:text-ink" disabled={!canSetPassword} type="submit">Set password</ShimmerButton>
           </>
         )}
         {status ? <p className="mt-4 text-sm text-chalk/75">{status}</p> : null}
-      </form>
+      </MagicCard>
+      </FadeContent>
     </main>
   );
 }

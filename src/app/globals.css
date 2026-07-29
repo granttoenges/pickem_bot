@@ -22,3 +22,80 @@ input,
 select {
   font: inherit;
 }
+
+.pickem-fade-content {
+  animation: pickem-fade-up 420ms ease-out both;
+}
+
+.pickem-magic-card {
+  position: relative;
+  overflow: hidden;
+}
+
+.pickem-magic-card::before {
+  background: radial-gradient(500px circle at var(--x, 50%) var(--y, 0%), rgba(214, 166, 68, 0.12), transparent 42%);
+  content: "";
+  inset: 0;
+  opacity: 0;
+  pointer-events: none;
+  position: absolute;
+  transition: opacity 180ms ease;
+}
+
+.pickem-magic-card:hover::before,
+.pickem-magic-card:focus-within::before {
+  opacity: 1;
+}
+
+.pickem-magic-card > * {
+  position: relative;
+}
+
+.pickem-shimmer-button::after {
+  animation: pickem-shimmer 2.8s ease-in-out infinite;
+  background: linear-gradient(110deg, transparent 0%, rgba(255, 255, 255, 0.26) 45%, transparent 65%);
+  content: "";
+  inset: -30% -80%;
+  pointer-events: none;
+  position: absolute;
+  transform: translateX(-60%) rotate(12deg);
+}
+
+@keyframes pickem-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes pickem-border-beam {
+  to {
+    transform: rotate(1turn);
+  }
+}
+
+@keyframes pickem-shimmer {
+  0%,
+  45% {
+    transform: translateX(-70%) rotate(12deg);
+  }
+  100% {
+    transform: translateX(70%) rotate(12deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pickem-fade-content,
+  .pickem-shimmer-button::after {
+    animation: none;
+  }
+
+  .pickem-magic-card,
+  .pickem-shimmer-button {
+    transition: none;
+  }
+}

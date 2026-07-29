@@ -1,5 +1,8 @@
+"use client";
+
 import type { GameWithOptions, PickClaim, PickOption } from "../lib/api";
 import { TeamLogo } from "./TeamLogo";
+import { BorderBeam } from "./ui/polish";
 
 type Mode = "claim" | "summary" | "admin_select";
 
@@ -31,7 +34,7 @@ export function GameOddsBoard({
   const gameUnder = findOption(game, "game-total-under");
 
   return (
-    <article className="w-full overflow-hidden rounded-md border border-ink/15 bg-white text-ink shadow-md ring-1 ring-ink/5 dark:border-white/15 dark:bg-zinc-900 dark:text-zinc-100 dark:ring-white/5">
+    <article className="w-full overflow-hidden rounded-md border border-ink/15 bg-white text-ink shadow-md ring-1 ring-ink/5 transition duration-200 hover:-translate-y-0.5 hover:border-turf/25 hover:shadow-lg dark:border-white/15 dark:bg-zinc-900 dark:text-zinc-100 dark:ring-white/5 dark:hover:border-emerald-300/25">
       <header className="border-b border-ink/15 bg-field px-3 py-3 sm:px-4 sm:py-4 dark:border-white/15 dark:bg-zinc-800/70">
         <div className="flex items-center justify-between gap-3">
           <span className="rounded bg-ink px-3 py-1 text-xs font-extrabold tracking-wide text-white dark:bg-gold dark:text-ink">{game.sportLeague}</span>
@@ -170,11 +173,12 @@ function OptionCell({
 
   return (
     <button
-      className={`flex min-h-[58px] flex-col items-center justify-center gap-1 border-l border-ink/15 px-1 text-center transition sm:min-h-[70px] sm:px-2 dark:border-white/10 ${cellClass(mine, disabled, mode)}`}
+      className={`relative flex min-h-[58px] flex-col items-center justify-center gap-1 overflow-hidden border-l border-ink/15 px-1 text-center transition sm:min-h-[70px] sm:px-2 dark:border-white/10 ${cellClass(mine, disabled, mode)}`}
       disabled={disabled}
       type="button"
       onClick={() => onPick?.(option)}
     >
+      {mine ? <BorderBeam className="opacity-65" /> : null}
       <span className={`${compact ? "text-[11px] sm:text-xs" : "text-xs sm:text-sm"} font-bold leading-none`}>{label}</span>
       <span className="text-[9px] font-bold uppercase leading-none sm:text-[10px]">{pending ? "Saving" : actionLabel({ mine, claim: Boolean(claim), mode })}</span>
     </button>

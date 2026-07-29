@@ -5,6 +5,7 @@ import { AppShell } from "../components/AppShell";
 import { AuthGuard } from "../components/AuthGuard";
 import { GameOddsBoard } from "../components/GameOddsBoard";
 import { TeamLogo } from "../components/TeamLogo";
+import { FadeContent, MagicCard, NumberTicker } from "../components/ui/polish";
 import { apiGet, apiSend, AppLeague, GameWithOptions, LineProposal, PickClaim, PickOption, ProposalResponse, ProposalResponseStance, ProposalSummary, SportLeague, Week, weekQuery } from "../lib/api";
 import { appConfig } from "../lib/config";
 import { getPreferredLeagueId, persistPreferredLeagueId } from "../lib/leaguePreference";
@@ -222,7 +223,7 @@ export default function PlayerBoardPage() {
           </div>
         </div>
       ) : null}
-      <section className="mx-auto max-w-7xl px-5 py-8 md:px-8">
+      <FadeContent className="mx-auto max-w-7xl px-5 py-8 md:px-8">
         <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
           <div>
             <p className="text-sm font-semibold uppercase tracking-[0.2em] text-turf">Player Portal</p>
@@ -265,14 +266,14 @@ export default function PlayerBoardPage() {
           <div className="mb-4 grid gap-3 md:grid-cols-3">
             <Quota label="NFL" submitted={summary.NFL.submitted} required={summary.NFL.required} />
             <Quota label="CFB" submitted={summary.NCAAF.submitted} required={summary.NCAAF.required} />
-            <div className={`rounded border p-4 ${summary.complete ? "border-turf bg-turf/10 dark:border-emerald-400/50 dark:bg-emerald-400/10" : "border-ink/10 bg-white dark:border-white/10 dark:bg-zinc-900"}`}>
+            <MagicCard className={`p-4 ${summary.complete ? "border-turf bg-turf/10 dark:border-emerald-400/50 dark:bg-emerald-400/10" : ""}`} active={summary.complete}>
               <div className="text-sm font-semibold text-ink/60 dark:text-zinc-400">Card Status</div>
               <div className="mt-1 text-xl font-semibold">{summary.complete ? "Complete" : "Incomplete"}</div>
-            </div>
+            </MagicCard>
           </div>
         ) : null}
 
-        {status ? <div className="mb-4 rounded border border-ink/10 bg-white p-3 text-sm dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-200">{status}</div> : null}
+        {status ? <MagicCard className="mb-4 p-3 text-sm dark:text-zinc-200">{status}</MagicCard> : null}
 
         <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
           <div className="flex gap-2">
@@ -296,9 +297,9 @@ export default function PlayerBoardPage() {
         {tab === "available" ? (
           <div className="space-y-3">
             {pickMode === "admin_selected" ? (
-              <div className="rounded border border-ink/10 bg-white p-3 text-sm text-ink/70 dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-300">
+              <MagicCard className="p-3 text-sm text-ink/70 dark:text-zinc-300">
                 This league uses admin-selected lines. Review available games here, then use League Picks to choose with or against.
-              </div>
+              </MagicCard>
             ) : null}
             {filteredGames.map((game) => (
               <GameOddsBoard
@@ -312,7 +313,7 @@ export default function PlayerBoardPage() {
                 pendingOptionId={pendingOptionId}
               />
             ))}
-            {!filteredGames.length && !status ? <div className="rounded border border-ink/10 bg-white p-6 dark:border-white/10 dark:bg-zinc-900">No {emptySportLabel}games are available for this league week yet.</div> : null}
+            {!filteredGames.length && !status ? <MagicCard className="p-6">No {emptySportLabel}games are available for this league week yet.</MagicCard> : null}
           </div>
         ) : tab === "mine" ? (
           <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
@@ -320,7 +321,7 @@ export default function PlayerBoardPage() {
               const game = gamesById.get(proposal.gameId);
               const response = userResponseByProposal.get(proposal.proposalId);
               return (
-                <article key={proposal.proposalId} className={`rounded border bg-white p-4 dark:bg-zinc-900 ${replaceProposalId === proposal.proposalId ? "border-gold ring-2 ring-gold/30 dark:ring-gold/40" : "border-ink/10 dark:border-white/10"}`}>
+                <MagicCard as="article" key={proposal.proposalId} className="p-4" active={replaceProposalId === proposal.proposalId}>
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div className="flex min-w-0 items-start gap-3">
                       <ProposalLogo proposal={proposal} game={game} />
@@ -343,10 +344,10 @@ export default function PlayerBoardPage() {
                       Release
                     </button>
                   </div>
-                </article>
+                </MagicCard>
               );
             })}
-            {!filteredUserProposals.length ? <div className="rounded border border-ink/10 bg-white p-6 text-ink/60 dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-400">{pickMode === "admin_selected" ? `This league uses admin-selected lines, so you do not need to propose your own ${emptySportLabel}lines.` : `You have not proposed any ${emptySportLabel}lines yet.`}</div> : null}
+            {!filteredUserProposals.length ? <MagicCard className="p-6 text-ink/60 dark:text-zinc-400">{pickMode === "admin_selected" ? `This league uses admin-selected lines, so you do not need to propose your own ${emptySportLabel}lines.` : `You have not proposed any ${emptySportLabel}lines yet.`}</MagicCard> : null}
           </div>
         ) : (
           <div className="grid gap-3 md:grid-cols-2">
@@ -356,7 +357,7 @@ export default function PlayerBoardPage() {
               const totals = responseTotals(proposal.proposalId, proposalResponses);
               const responsePending = pendingProposalId === proposal.proposalId;
               return (
-                <article key={proposal.proposalId} className="rounded border border-ink/15 bg-white p-4 shadow-sm ring-1 ring-ink/5 dark:border-white/15 dark:bg-zinc-900 dark:ring-white/5">
+                <MagicCard as="article" key={proposal.proposalId} className="p-4" active={Boolean(response)}>
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div className="flex min-w-0 items-start gap-3">
                       <ProposalLogo proposal={proposal} game={game} />
@@ -385,13 +386,13 @@ export default function PlayerBoardPage() {
                       {responsePending ? "Saving..." : "Against"}
                     </button>
                   </div>
-                </article>
+                </MagicCard>
               );
             })}
-            {!filteredOtherProposals.length ? <div className="rounded border border-ink/10 bg-white p-6 text-ink/60 dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-400">No {emptySportLabel}league picks are available yet.</div> : null}
+            {!filteredOtherProposals.length ? <MagicCard className="p-6 text-ink/60 dark:text-zinc-400">No {emptySportLabel}league picks are available yet.</MagicCard> : null}
           </div>
         )}
-      </section>
+      </FadeContent>
     </AppShell>
     </AuthGuard>
   );
@@ -400,10 +401,10 @@ export default function PlayerBoardPage() {
 function Quota({ label, submitted, required }: { label: string; submitted: number; required: number }) {
   const complete = submitted === required;
   return (
-    <div className={`rounded border p-4 ${complete ? "border-turf bg-turf/10 dark:border-emerald-400/50 dark:bg-emerald-400/10" : "border-ink/10 bg-white dark:border-white/10 dark:bg-zinc-900"}`}>
+    <MagicCard className={`p-4 ${complete ? "border-turf bg-turf/10 dark:border-emerald-400/50 dark:bg-emerald-400/10" : ""}`} active={complete}>
       <div className="text-sm font-semibold text-ink/60 dark:text-zinc-400">{label} Lines</div>
-      <div className="mt-1 text-xl font-semibold">{submitted} / {required}</div>
-    </div>
+      <div className="mt-1 text-xl font-semibold"><NumberTicker value={submitted} /> / {required}</div>
+    </MagicCard>
   );
 }
 
