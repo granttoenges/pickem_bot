@@ -1,8 +1,5 @@
-"use client";
-
 import type { GameWithOptions, PickClaim, PickOption } from "../lib/api";
 import { TeamLogo } from "./TeamLogo";
-import { BorderBeam } from "./ui/polish";
 
 type Mode = "claim" | "summary" | "admin_select";
 
@@ -173,12 +170,11 @@ function OptionCell({
 
   return (
     <button
-      className={`relative flex min-h-[58px] flex-col items-center justify-center gap-1 overflow-hidden border-l border-ink/15 px-1 text-center transition sm:min-h-[70px] sm:px-2 dark:border-white/10 ${cellClass(mine, disabled, mode)}`}
+      className={`flex min-h-[58px] flex-col items-center justify-center gap-1 border-l border-ink/15 px-1 text-center transition sm:min-h-[70px] sm:px-2 dark:border-white/10 ${cellClass(mine, disabled, mode)}`}
       disabled={disabled}
       type="button"
       onClick={() => onPick?.(option)}
     >
-      {mine ? <BorderBeam className="opacity-65" /> : null}
       <span className={`${compact ? "text-[11px] sm:text-xs" : "text-xs sm:text-sm"} font-bold leading-none`}>{label}</span>
       <span className="text-[9px] font-bold uppercase leading-none sm:text-[10px]">{pending ? "Saving" : actionLabel({ mine, claim: Boolean(claim), mode })}</span>
     </button>
