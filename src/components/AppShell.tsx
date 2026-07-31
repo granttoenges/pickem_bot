@@ -38,6 +38,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <nav className="flex flex-wrap items-center gap-2 text-sm">
             <Link className={navClass(pathname === "/")} href="/">Board</Link>
             <Link className={navClass(pathname === "/standings")} href="/standings">Standings</Link>
+            <Link className={navClass(pathname === "/cfp")} href="/cfp">CFP</Link>
             {session?.groups.some((group) => group === "admin" || group === "super_admin") ? <Link className={navClass(pathname === "/admin")} href="/admin">Admin</Link> : null}
             <div className="flex rounded-md border border-white/15 bg-white/5 p-1 shadow-inner">
               {(["system", "light", "dark"] as ThemePreference[]).map((preference) => (

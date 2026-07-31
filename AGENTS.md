@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-Pickem Bot is a private, invite-only NFL/NCAAF pickem app. It supports multiple app leagues, league-scoped admins, member-proposed lines, admin-selected board lines, with/against responses, DraftKings opening odds, and league standings.
+Pickem Bot is a private, invite-only NFL/NCAAF pickem app. It supports multiple app leagues, league-scoped admins, member-proposed lines, admin-selected board lines, with/against responses, DraftKings opening odds, league standings, and season-scoped CFP team assignments with picked/current futures odds.
 
 The deployed app is serverless AWS:
 
@@ -48,6 +48,7 @@ Only update active run2 resources unless the user explicitly says otherwise. Do 
   - `admin/page.tsx`: admin console.
   - `login/page.tsx`: Cognito login and password setup.
   - `standings/page.tsx`: standings view.
+  - `cfp/page.tsx`: CFP tracker, assignment board, and authorized admin controls.
 - `src/components/`: shared UI components.
   - `GameOddsBoard.tsx`: sportsbook-style game cards.
   - `TeamLogo.tsx`: mapped team logos with initials fallback.
@@ -59,6 +60,7 @@ Only update active run2 resources unless the user explicitly says otherwise. Do 
   - `types.ts`: backend domain types.
   - `pickRules.ts`, `grading.ts`, `time.ts`, `weekSettingsRules.ts`: pure business rules.
   - `draftkingsScraper.ts`: scraper Lambda.
+  - `cfpOddsScraper.ts`: daily/manual DraftKings CFP make-the-playoff futures scraper.
   - `scrapeScheduler.ts`: EventBridge-driven scraper scheduler.
 - `resultsHandler.ts`: results sync placeholder/handler.
   - Results sync uses free public scoreboard data, updates final scores, grades proposals/responses, and writes standings.
@@ -78,6 +80,7 @@ Only update active run2 resources unless the user explicitly says otherwise. Do 
 - Proposal: a member-proposed or admin-selected line.
 - Proposal response: a member's `with` or `against` response to a proposal.
 - League member: league-scoped role of `league_admin` or `player`.
+- CFP assignment: a unique league-season team owner with immutable picked odds and separately updated current odds.
 
 ## Backend Rules To Preserve
 
@@ -90,6 +93,10 @@ Only update active run2 resources unless the user explicitly says otherwise. Do 
 - Super admin can manage every league.
 - League admins can manage only their assigned league.
 - Removing a member deletes league-specific history.
+- CFP tracking is enabled per league-season; disabling it preserves assignments.
+- A CFP team can be assigned once per league-season, while a member can own multiple teams.
+- Failed or empty CFP scrapes must preserve the last successful odds. Assignment picked odds are immutable; only current odds change.
+- Authorized CFP odds submissions use alternating non-empty team-name and American-odds lines, must validate completely before storage, and use the same unavailable-team and immutable-picked-odds rules as a successful scrape.
 - If a removed user has no remaining league memberships, their Cognito user is deleted so future invite is fresh.
 
 ## Frontend Rules To Preserve
@@ -99,6 +106,7 @@ Only update active run2 resources unless the user explicitly says otherwise. Do 
 - Game cards should remain full-width and readable on mobile without horizontal scrolling.
 - Moneyline odds may be stored but should not appear as a pickable market unless explicitly requested.
 - Login tokens are stored in `sessionStorage`, not `localStorage`.
+- The `/cfp` board must remain readable on mobile; all members may view enabled data, but only league/super admins may mutate it.
 
 ## Commands
 

@@ -181,3 +181,44 @@ export interface ScrapeRun {
   parsedGameCount: number;
   errors: string[];
 }
+
+export interface CfpSeasonConfig {
+  leagueId: string;
+  seasonId: string;
+  enabled: boolean;
+  updatedAt: string;
+  updatedBy: string;
+}
+
+export interface CfpTeamOdds {
+  seasonId: string;
+  teamKey: string;
+  teamName: string;
+  americanOdds: number;
+  draftkingsOutcomeId?: string;
+  available: boolean;
+  capturedAt: string;
+  lastSeenAt: string;
+  sourceUrl: string;
+}
+
+export interface CfpAssignment {
+  leagueId: string;
+  seasonId: string;
+  teamKey: string;
+  teamName: string;
+  userId: string;
+  pickedOdds: number;
+  assignedAt: string;
+  assignedBy: string;
+}
+
+export interface CfpScrapeRun {
+  seasonId: string;
+  runId: string;
+  sourceUrl: string;
+  capturedAt: string;
+  status: "success" | "failed";
+  parsedTeamCount: number;
+  errors: string[];
+}

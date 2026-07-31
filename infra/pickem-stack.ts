@@ -81,6 +81,23 @@ export class PickemStack extends Stack {
       groupName: "player"
     });
 
+    const cfpScraperFunction = new NodejsFunction(this, "CfpOddsScraperFunction", {
+      runtime: Runtime.NODEJS_22_X,
+      functionName: `${resourcePrefix}-cfp-odds-scraper`,
+      entry: "src/backend/cfpOddsScraper.ts",
+      handler: "handler",
+      timeout: Duration.minutes(5),
+      memorySize: 1024,
+      logGroup: lambdaLogGroup(this, "CfpOddsScraperLogGroup", `${resourcePrefix}-cfp-odds-scraper`),
+      environment: {
+        TABLE_NAME: table.tableName
+      }
+    });
+    grantTableAccess(cfpScraperFunction, table, [
+      "dynamodb:PutItem",
+      "dynamodb:Query"
+    ]);
+
     const apiFunction = new NodejsFunction(this, "PickemApiFunction", {
       runtime: Runtime.NODEJS_22_X,
       functionName: `${resourcePrefix}-api`,
@@ -91,6 +108,7 @@ export class PickemStack extends Stack {
       environment: {
         TABLE_NAME: table.tableName,
         USER_POOL_ID: userPool.userPoolId,
+        CFP_SCRAPER_FUNCTION_NAME: cfpScraperFunction.functionName,
         CORS_ALLOWED_ORIGINS: corsAllowedOrigins.join(",")
       }
     });
@@ -114,6 +132,7 @@ export class PickemStack extends Stack {
       ],
       resources: [userPool.userPoolArn]
     }));
+    cfpScraperFunction.grantInvoke(apiFunction);
 
     const scraperFunction = new NodejsFunction(this, "DraftKingsScraperFunction", {
       runtime: Runtime.NODEJS_22_X,
@@ -228,10 +247,18 @@ export class PickemStack extends Stack {
       targets: [new LambdaFunction(resultsFunction)]
     });
 
+    new Rule(this, "CfpOddsScrapeRule", {
+      ruleName: `${resourcePrefix}-cfp-odds-scrape`,
+      description: "Refreshes DraftKings college football playoff qualification odds daily.",
+      schedule: Schedule.cron({ minute: "0", hour: "12" }),
+      targets: [new LambdaFunction(cfpScraperFunction)]
+    });
+
     addLambdaErrorAlarm(this, "ApiErrorAlarm", `${resourcePrefix}-api-errors`, apiFunction, alarmTopic);
     addLambdaErrorAlarm(this, "ScraperErrorAlarm", `${resourcePrefix}-scraper-errors`, scraperFunction, alarmTopic);
     addLambdaErrorAlarm(this, "ScrapeSchedulerErrorAlarm", `${resourcePrefix}-scrape-scheduler-errors`, scrapeSchedulerFunction, alarmTopic);
     addLambdaErrorAlarm(this, "ResultsSyncErrorAlarm", `${resourcePrefix}-results-sync-errors`, resultsFunction, alarmTopic);
+    addLambdaErrorAlarm(this, "CfpScraperErrorAlarm", `${resourcePrefix}-cfp-scraper-errors`, cfpScraperFunction, alarmTopic);
 
     if (enableAmplify) {
       const githubSecret = Secret.fromSecretNameV2(this, "GithubPatSecret", `${resourcePrefix}-github-pat`);
@@ -292,6 +319,9 @@ export class PickemStack extends Stack {
     });
     new CfnOutput(this, "DraftKingsScraperFunctionName", {
       value: scraperFunction.functionName
+    });
+    new CfnOutput(this, "CfpOddsScraperFunctionName", {
+      value: cfpScraperFunction.functionName
     });
   }
 }

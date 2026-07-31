@@ -24,6 +24,7 @@ The app is built to run locally and deploy cheaply on AWS with serverless servic
 - Member removal deletes league-specific history and resets the Cognito user only when that user has no other league memberships.
 - DraftKings scraper stores shared weekly games and opening odds for all leagues.
 - Opening lines are immutable; later line movement does not overwrite the first stored line.
+- Optional season-scoped CFP tracker lets league/super admins assign unique teams to members from DraftKings make-the-playoff futures. Members compare the immutable assigned price with the latest daily price on `/cfp`.
 - Results sync uses a free public scoreboard source to update final scores, grade proposed lines/responses, and write standings.
 - Critical Lambda failures publish to the app SNS alarm topic; app Lambda logs retain for 14 days.
 
@@ -35,7 +36,7 @@ The app is built to run locally and deploy cheaply on AWS with serverless servic
 - Storage: DynamoDB single-table design.
 - Hosting: AWS Amplify Hosting connected to GitHub `granttoenges/pickem_bot` `master`.
 - Infrastructure: AWS CDK in TypeScript.
-- Scheduling: EventBridge rule that runs a low-cost scrape scheduler every 15 minutes.
+- Scheduling: EventBridge runs the weekly scrape scheduler every 15 minutes and refreshes CFP futures daily at 12:00 UTC.
 - Tests: Vitest plus TypeScript checks.
 
 ## Local Setup
@@ -190,6 +191,8 @@ npm run s3:lifecycle:app-logs
 ```
 
 DraftKings odds are stored as shared source data by season/week/sport so every app league can use the same game board while keeping picks and membership separate.
+
+CFP make-the-playoff odds are stored separately as shared season data. League admins enable the tracker per league-season, may trigger an asynchronous refresh, or paste an alternating team/odds list such as `Notre Dame`, `−800`, `Texas A&M`, `+154` on separate lines. Blank lines are ignored. Submissions are fully validated before storage; omitted teams become unavailable, existing picked odds never change, and each successful submission is recorded as an odds update run. Failed, empty, or invalid updates retain the last successful team list.
 
 Final scores are fetched by the results sync from ESPN's public scoreboard JSON endpoints for NFL and college football. Admins can manually correct final scores in the admin console; standings are generated from stored opening lines and proposal responses.
 
