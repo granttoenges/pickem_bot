@@ -11,6 +11,10 @@ import {
 } from "@aws-sdk/lib-dynamodb";
 import type {
   AppLeague,
+  CfpAssignment,
+  CfpScrapeRun,
+  CfpSeasonConfig,
+  CfpTeamOdds,
   Game,
   LeagueMember,
   LineProposal,
@@ -23,6 +27,7 @@ import type {
   Standing,
   Week
 } from "./types";
+import { mergeCfpTeamOdds } from "./cfpRules";
 
 const client = DynamoDBDocumentClient.from(new DynamoDBClient({}));
 
@@ -161,7 +166,8 @@ export class PickemRepository {
         (item.entityType === "PickClaim" && item.userId === userId) ||
         (item.entityType === "LineProposal" && item.proposerId === userId) ||
         (item.entityType === "ProposalResponse" && (item.responderId === userId || removedProposalIds.has(String(item.proposalId)))) ||
-        (item.entityType === "Standing" && item.userId === userId);
+        (item.entityType === "Standing" && item.userId === userId) ||
+        (item.entityType === "CfpAssignment" && item.userId === userId);
 
       if (shouldDelete) {
         keysToDelete.set(`${item.pk}\u0000${item.sk}`, { pk: item.pk, sk: item.sk });
@@ -706,6 +712,126 @@ export class PickemRepository {
         ...run
       }
     }));
+  }
+
+  async getCfpSeasonConfig(leagueId: string, seasonId: string): Promise<CfpSeasonConfig | undefined> {
+    const result = await client.send(new GetCommand({
+      TableName: this.tableName,
+      Key: { pk: `LEAGUE#${leagueId}#CFP`, sk: `SEASON#${seasonId}` }
+    }));
+    return result.Item as CfpSeasonConfig | undefined;
+  }
+
+  async putCfpSeasonConfig(config: CfpSeasonConfig): Promise<void> {
+    await client.send(new PutCommand({
+      TableName: this.tableName,
+      Item: {
+        pk: `LEAGUE#${config.leagueId}#CFP`,
+        sk: `SEASON#${config.seasonId}`,
+        entityType: "CfpSeasonConfig",
+        ...config
+      }
+    }));
+  }
+
+  async listCfpSeasons(leagueId: string): Promise<CfpSeasonConfig[]> {
+    const result = await client.send(new QueryCommand({
+      TableName: this.tableName,
+      KeyConditionExpression: "pk = :pk and begins_with(sk, :prefix)",
+      ExpressionAttributeValues: {
+        ":pk": `LEAGUE#${leagueId}#CFP`,
+        ":prefix": "SEASON#"
+      }
+    }));
+    return ((result.Items ?? []) as CfpSeasonConfig[]).sort((a, b) => b.seasonId.localeCompare(a.seasonId));
+  }
+
+  async listCfpTeamOdds(seasonId: string): Promise<CfpTeamOdds[]> {
+    const result = await client.send(new QueryCommand({
+      TableName: this.tableName,
+      KeyConditionExpression: "pk = :pk and begins_with(sk, :prefix)",
+      ExpressionAttributeValues: {
+        ":pk": `SOURCE#CFP#${seasonId}`,
+        ":prefix": "TEAM#"
+      }
+    }));
+    return ((result.Items ?? []) as CfpTeamOdds[]).sort((a, b) => a.teamName.localeCompare(b.teamName));
+  }
+
+  async replaceCurrentCfpTeamOdds(seasonId: string, odds: CfpTeamOdds[]): Promise<void> {
+    const current = await this.listCfpTeamOdds(seasonId);
+    for (const item of mergeCfpTeamOdds(current, odds)) {
+      await client.send(new PutCommand({
+        TableName: this.tableName,
+        Item: {
+          pk: `SOURCE#CFP#${seasonId}`,
+          sk: `TEAM#${item.teamKey}`,
+          entityType: "CfpTeamOdds",
+          ...item
+        }
+      }));
+    }
+  }
+
+  async listCfpAssignments(leagueId: string, seasonId: string): Promise<CfpAssignment[]> {
+    const result = await client.send(new QueryCommand({
+      TableName: this.tableName,
+      KeyConditionExpression: "pk = :pk and begins_with(sk, :prefix)",
+      ExpressionAttributeValues: {
+        ":pk": `CFP_ASSIGN#${leagueId}#${seasonId}`,
+        ":prefix": "TEAM#"
+      }
+    }));
+    return ((result.Items ?? []) as CfpAssignment[]).sort((a, b) => a.teamName.localeCompare(b.teamName));
+  }
+
+  async createCfpAssignment(assignment: CfpAssignment): Promise<boolean> {
+    try {
+      await client.send(new PutCommand({
+        TableName: this.tableName,
+        Item: {
+          pk: `CFP_ASSIGN#${assignment.leagueId}#${assignment.seasonId}`,
+          sk: `TEAM#${assignment.teamKey}`,
+          entityType: "CfpAssignment",
+          ...assignment
+        },
+        ConditionExpression: "attribute_not_exists(pk)"
+      }));
+      return true;
+    } catch (error) {
+      if (error instanceof Error && error.name === "ConditionalCheckFailedException") {
+        return false;
+      }
+      throw error;
+    }
+  }
+
+  async deleteCfpAssignment(leagueId: string, seasonId: string, teamKey: string): Promise<void> {
+    await client.send(new DeleteCommand({
+      TableName: this.tableName,
+      Key: { pk: `CFP_ASSIGN#${leagueId}#${seasonId}`, sk: `TEAM#${teamKey}` }
+    }));
+  }
+
+  async putCfpScrapeRun(run: CfpScrapeRun): Promise<void> {
+    await client.send(new PutCommand({
+      TableName: this.tableName,
+      Item: {
+        pk: `CFP_SCRAPE#${run.seasonId}`,
+        sk: `RUN#${run.runId}`,
+        entityType: "CfpScrapeRun",
+        ...run
+      }
+    }));
+  }
+
+  async listCfpScrapeRuns(seasonId: string): Promise<CfpScrapeRun[]> {
+    const result = await client.send(new QueryCommand({
+      TableName: this.tableName,
+      KeyConditionExpression: "pk = :pk",
+      ExpressionAttributeValues: { ":pk": `CFP_SCRAPE#${seasonId}` }
+    }));
+    return ((result.Items ?? []) as CfpScrapeRun[]).sort((a, b) => b.capturedAt.localeCompare(a.capturedAt));
   }
 }
 

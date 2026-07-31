@@ -25,6 +25,14 @@ The app is deployed as a low-cost AWS serverless system with Amplify Hosting, Co
 
 League mode is configured per app league.
 
+### CFP Team Tracker
+
+- League and super admins enable CFP tracking independently for each league-season.
+- Each member may receive multiple teams, while a team may be assigned only once in a league-season.
+- Assignments preserve the DraftKings make-the-playoff American odds at assignment time and also display the latest successfully scraped price.
+- All league members can view enabled assignments on `/cfp`; only authorized admins can enable, refresh, paste and submit a current alternating team/odds list, assign, or remove.
+- A daily 12:00 UTC scrape updates shared current odds. Manual refreshes are asynchronous. Empty or failed scrapes preserve the last successful data.
+
 ### Weekly Flow
 
 1. Admin sets league mode, proposal limits, DraftKings capture time, and pick cutoff.
@@ -64,6 +72,7 @@ Routes:
 - `/`: player board with `Available Games`, `My Picks`, and `League Picks`.
 - `/admin`: league settings, invites, members, board-line selection, scraper status, proposed lines, and submitted responses.
 - `/standings`: league-scoped standings.
+- `/cfp`: season-scoped CFP assignments, current odds, and authorized admin controls.
 
 UI notes:
 
@@ -96,6 +105,14 @@ Core endpoints:
 - `PUT /proposal-responses`
 - `DELETE /proposal-responses`
 - `GET /standings`
+- `GET /cfp/seasons`
+- `GET /cfp`
+- `GET /admin/cfp`
+- `PUT /admin/cfp/settings`
+- `PUT /admin/cfp/assignments`
+- `DELETE /admin/cfp/assignments`
+- `POST /admin/cfp/refresh`
+- `PUT /admin/cfp/odds` (validated alternating team-name and American-odds lines)
 
 Authorization:
 
@@ -110,7 +127,7 @@ Member removal:
 - Super admins can remove players or league admins.
 - League admins can remove players only.
 - Self-removal and super-admin removal are blocked.
-- Removal deletes league-specific membership, picks, claims, proposals, proposal responses, and standings.
+- Removal deletes league-specific membership, picks, claims, proposals, proposal responses, standings, and CFP assignments.
 - If the user has no other league memberships, their Cognito user is deleted so a later invite creates a fresh account.
 
 ## DynamoDB Model
@@ -132,6 +149,10 @@ Important item families:
 - `PROPOSAL_RESPONSE#{leagueId}#{seasonId}#{weekId}` / `PROPOSAL#{proposalId}#RESPONDER#{userId}`: with/against responses.
 - `STANDINGS#{leagueId}#{seasonId}` / `USER#{userId}`: standings rows.
 - `SCRAPE#{seasonId}#{weekId}` / `RUN#{runId}`: scrape run metadata.
+- `LEAGUE#{leagueId}#CFP` / `SEASON#{seasonId}`: CFP opt-in configuration.
+- `SOURCE#CFP#{seasonId}` / `TEAM#{teamKey}`: latest shared DraftKings CFP qualification price.
+- `CFP_ASSIGN#{leagueId}#{seasonId}` / `TEAM#{teamKey}`: unique league-season assignment and immutable picked price.
+- `CFP_SCRAPE#{seasonId}` / `RUN#{runId}`: CFP scrape status and errors.
 
 Opening lines are first-write-wins and must not be overwritten by later scrapes.
 
@@ -155,6 +176,8 @@ Scraper behavior:
 - It does not overwrite existing opening-line items.
 - Admin review/manual correction remains the fallback for missing markets.
 
+The dedicated CFP scraper targets only affirmative make-the-playoff futures, supports direct team outcomes and nested `Yes` selections, updates current prices, and never clears stored odds when DraftKings returns an empty or invalid market. Authorized admins may instead paste and submit a complete alternating team-name and American-odds list for a selected season. Blank lines are ignored. The API validates every pair and normalized team key before writing; a successful submission uses the same replacement semantics and scrape-run history as an automated refresh.
+
 ## Results Sync
 
 - Results sync uses a free public scoreboard JSON source for NFL and NCAAF final scores.
@@ -177,7 +200,7 @@ AWS services:
 - Amplify Hosting for frontend.
 - Cognito user pool and groups. Human Cognito users are bootstrapped with CLI/script commands, not managed by CDK/CloudFormation.
 - API Gateway HTTP API.
-- Lambda API, scraper, scheduler, and results handlers.
+- Lambda API, weekly odds scraper/scheduler, CFP futures scraper, and results handlers.
 - DynamoDB on-demand table with point-in-time recovery, deletion protection, and retain policy.
 - EventBridge schedules.
 - Secrets Manager secret `pickem-bot-v1-run2-github-pat`.
@@ -249,6 +272,7 @@ Covered behavior includes:
 - password policy validation,
 - quota input parsing,
 - member-removal authorization.
+- CFP market parsing, alternate outcome shapes, duplicate normalization, and safe empty-market failure.
 
 Manual verification:
 
@@ -256,6 +280,7 @@ Manual verification:
 - `/` shows league switcher, sport filter, game board, proposals, and responses.
 - `/admin` can invite/remove members, change settings, and select admin board lines.
 - `/standings` loads for the selected league.
+- `/cfp` shows enabled assignments and restricts management controls to league/super admins.
 - API `/health` returns `{"ok":true}`.
 
 ## Assumptions

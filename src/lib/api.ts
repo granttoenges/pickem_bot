@@ -160,6 +160,48 @@ export interface ScrapeRun {
   errors: string[];
 }
 
+export interface CfpSeasonConfig {
+  leagueId: string;
+  seasonId: string;
+  enabled: boolean;
+  updatedAt?: string;
+  updatedBy?: string;
+}
+
+export interface CfpTeamOdds {
+  seasonId: string;
+  teamKey: string;
+  teamName: string;
+  americanOdds: number;
+  available: boolean;
+  capturedAt: string;
+  lastSeenAt: string;
+  sourceUrl: string;
+}
+
+export interface CfpAssignment {
+  leagueId: string;
+  seasonId: string;
+  teamKey: string;
+  teamName: string;
+  userId: string;
+  memberLabel: string;
+  pickedOdds: number;
+  currentOdds?: number;
+  available: boolean;
+  currentCapturedAt?: string;
+  assignedAt: string;
+  assignedBy: string;
+}
+
+export interface CfpScrapeRun {
+  seasonId: string;
+  capturedAt: string;
+  status: "success" | "failed";
+  parsedTeamCount: number;
+  errors: string[];
+}
+
 export interface Standing {
   leagueId: string;
   seasonId?: string;

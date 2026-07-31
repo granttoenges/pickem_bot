@@ -6,6 +6,7 @@ import {
   AdminListGroupsForUserCommand,
   CognitoIdentityProviderClient
 } from "@aws-sdk/client-cognito-identity-provider";
+import { InvocationType, InvokeCommand, LambdaClient } from "@aws-sdk/client-lambda";
 import type { APIGatewayProxyEventV2WithJWTAuthorizer, APIGatewayProxyStructuredResultV2 } from "aws-lambda";
 import { z } from "zod";
 import { PickemRepository } from "./repository";
@@ -13,9 +14,11 @@ import { assertBeforeCutoff, defaultWeeklyCutoffUtc, defaultWeeklyScrapeUtc } fr
 import { assertCanManuallyChangeProposalResponse, pickSummary, proposalSummary, responseResult, selfWithResponseForProposal, validateProposalQuota, validateQuota } from "./pickRules";
 import { applyWeekSettings } from "./weekSettingsRules";
 import { assertCanRemoveLeagueMember } from "./memberRemovalRules";
-import type { AppLeague, Game, GameWithOptions, LeagueMember, LineProposal, PickOption, PlayerPick, ProposalResponse, Week } from "./types";
+import { buildCfpAssignment, CFP_ODDS_UPLOAD_SOURCE, findAssignableCfpTeam, parseUploadedCfpOddsText } from "./cfpRules";
+import type { AppLeague, CfpAssignment, CfpScrapeRun, CfpSeasonConfig, CfpTeamOdds, Game, GameWithOptions, LeagueMember, LineProposal, PickOption, PlayerPick, ProposalResponse, Week } from "./types";
 
 const cognito = new CognitoIdentityProviderClient({});
+const lambda = new LambdaClient({});
 
 const defaultLeagueId = "friends";
 const superAdminEmails = new Set(["grantoenges@gmail.com"]);
@@ -139,6 +142,36 @@ const deleteProposalResponseSchema = z.object({
   proposalId: z.string().min(1)
 });
 
+const cfpSettingsSchema = z.object({
+  leagueId: z.string().min(1),
+  seasonId: z.string().min(1),
+  enabled: z.boolean()
+});
+
+const cfpAssignmentSchema = z.object({
+  leagueId: z.string().min(1),
+  seasonId: z.string().min(1),
+  userId: z.string().min(1),
+  teamKey: z.string().min(1)
+});
+
+const deleteCfpAssignmentSchema = z.object({
+  leagueId: z.string().min(1),
+  seasonId: z.string().min(1),
+  teamKey: z.string().min(1)
+});
+
+const cfpRefreshSchema = z.object({
+  leagueId: z.string().min(1),
+  seasonId: z.string().min(1)
+});
+
+const cfpOddsUploadSchema = z.object({
+  leagueId: z.string().min(1),
+  seasonId: z.string().min(1),
+  oddsText: z.string().min(1).max(50_000)
+});
+
 export async function handler(event: APIGatewayProxyEventV2WithJWTAuthorizer): Promise<APIGatewayProxyStructuredResultV2> {
   try {
     const repository = new PickemRepository();
@@ -170,6 +203,164 @@ export async function handler(event: APIGatewayProxyEventV2WithJWTAuthorizer): P
       await requireLeagueAccess(repository, auth, leagueId);
       const weeks = await repository.listWeeksForLeague(leagueId, seasonId);
       return json({ weeks });
+    }
+
+    if (method === "GET" && path === "/cfp/seasons") {
+      const leagueId = requireQuery(event, "leagueId");
+      await requireLeagueAccess(repository, auth, leagueId);
+      const seasons = await repository.listCfpSeasons(leagueId);
+      return json({ seasons });
+    }
+
+    if (method === "GET" && path === "/cfp") {
+      const leagueId = requireQuery(event, "leagueId");
+      const seasonId = requireQuery(event, "seasonId");
+      await requireLeagueAccess(repository, auth, leagueId);
+      const [config, assignments, odds, members, scrapeRuns, canManage] = await Promise.all([
+        repository.getCfpSeasonConfig(leagueId, seasonId),
+        repository.listCfpAssignments(leagueId, seasonId),
+        repository.listCfpTeamOdds(seasonId),
+        repository.listLeagueMembers(leagueId),
+        repository.listCfpScrapeRuns(seasonId),
+        canManageLeague(repository, auth, leagueId)
+      ]);
+      const enabled = config?.enabled === true;
+      return json({
+        config: config ?? { leagueId, seasonId, enabled: false },
+        canManage,
+        assignments: enabled || canManage ? hydrateCfpAssignments(assignments, odds, members) : [],
+        latestScrape: scrapeRuns[0]
+      });
+    }
+
+    if (method === "GET" && path === "/admin/cfp") {
+      const leagueId = requireQuery(event, "leagueId");
+      const seasonId = requireQuery(event, "seasonId");
+      await requireLeagueAdmin(repository, auth, leagueId);
+      const [config, assignments, odds, members, scrapeRuns] = await Promise.all([
+        repository.getCfpSeasonConfig(leagueId, seasonId),
+        repository.listCfpAssignments(leagueId, seasonId),
+        repository.listCfpTeamOdds(seasonId),
+        repository.listLeagueMembers(leagueId),
+        repository.listCfpScrapeRuns(seasonId)
+      ]);
+      return json({
+        config: config ?? { leagueId, seasonId, enabled: false },
+        assignments: hydrateCfpAssignments(assignments, odds, members),
+        odds,
+        members,
+        latestScrape: scrapeRuns[0]
+      });
+    }
+
+    if (method === "PUT" && path === "/admin/cfp/settings") {
+      const body = cfpSettingsSchema.parse(parseBody(event));
+      await requireLeagueAdmin(repository, auth, body.leagueId);
+      const config: CfpSeasonConfig = {
+        ...body,
+        updatedAt: new Date().toISOString(),
+        updatedBy: auth.userId
+      };
+      await repository.putCfpSeasonConfig(config);
+      audit("cfp.settings.update", auth, body);
+      return json({ config });
+    }
+
+    if (method === "PUT" && path === "/admin/cfp/assignments") {
+      const body = cfpAssignmentSchema.parse(parseBody(event));
+      await requireLeagueAdmin(repository, auth, body.leagueId);
+      const [config, member, odds, assignments] = await Promise.all([
+        repository.getCfpSeasonConfig(body.leagueId, body.seasonId),
+        repository.getLeagueMember(body.leagueId, body.userId),
+        repository.listCfpTeamOdds(body.seasonId),
+        repository.listCfpAssignments(body.leagueId, body.seasonId)
+      ]);
+      if (!config?.enabled) {
+        throw new SafeApiError("Enable CFP tracking for this season before assigning teams.", 409);
+      }
+      if (!member) {
+        throw new SafeApiError("League member not found.", 404);
+      }
+      const selection = findAssignableCfpTeam(assignments, odds, body.teamKey);
+      if (selection.status === "assigned") {
+        throw new SafeApiError("That team is already assigned in this league.", 409);
+      }
+      if (selection.status === "unavailable") {
+        throw new SafeApiError("That team is not currently available in the DraftKings CFP market.", 404);
+      }
+      const assignment: CfpAssignment = buildCfpAssignment({
+        leagueId: body.leagueId,
+        seasonId: body.seasonId,
+        userId: body.userId,
+        assignedAt: new Date().toISOString(),
+        assignedBy: auth.userId,
+        odds: selection.odds
+      });
+      if (!await repository.createCfpAssignment(assignment)) {
+        throw new SafeApiError("That team is already assigned in this league.", 409);
+      }
+      audit("cfp.assignment.create", auth, { leagueId: body.leagueId, seasonId: body.seasonId, userId: body.userId, teamKey: body.teamKey });
+      return json({ assignment }, 201);
+    }
+
+    if (method === "DELETE" && path === "/admin/cfp/assignments") {
+      const body = deleteCfpAssignmentSchema.parse(parseBody(event));
+      await requireLeagueAdmin(repository, auth, body.leagueId);
+      const assignment = (await repository.listCfpAssignments(body.leagueId, body.seasonId)).find((item) => item.teamKey === body.teamKey);
+      if (!assignment) {
+        throw new SafeApiError("CFP assignment not found.", 404);
+      }
+      await repository.deleteCfpAssignment(body.leagueId, body.seasonId, body.teamKey);
+      audit("cfp.assignment.delete", auth, { leagueId: body.leagueId, seasonId: body.seasonId, teamKey: body.teamKey, userId: assignment.userId });
+      return json({ ok: true });
+    }
+
+    if (method === "POST" && path === "/admin/cfp/refresh") {
+      const body = cfpRefreshSchema.parse(parseBody(event));
+      await requireLeagueAdmin(repository, auth, body.leagueId);
+      if (!(await repository.getCfpSeasonConfig(body.leagueId, body.seasonId))?.enabled) {
+        throw new SafeApiError("Enable CFP tracking for this season before refreshing odds.", 409);
+      }
+      const functionName = process.env.CFP_SCRAPER_FUNCTION_NAME;
+      if (!functionName) {
+        throw new Error("CFP_SCRAPER_FUNCTION_NAME is required.");
+      }
+      await lambda.send(new InvokeCommand({
+        FunctionName: functionName,
+        InvocationType: InvocationType.Event,
+        Payload: Buffer.from(JSON.stringify({ seasonId: body.seasonId }))
+      }));
+      audit("cfp.refresh.request", auth, body);
+      return json({ accepted: true }, 202);
+    }
+
+    if (method === "PUT" && path === "/admin/cfp/odds") {
+      const body = cfpOddsUploadSchema.parse(parseBody(event));
+      await requireLeagueAdmin(repository, auth, body.leagueId);
+      const capturedAt = new Date().toISOString();
+      let odds: CfpTeamOdds[];
+      try {
+        odds = parseUploadedCfpOddsText(body.oddsText, body.seasonId, capturedAt);
+      } catch (error) {
+        throw new SafeApiError(error instanceof Error ? error.message : "Invalid CFP odds JSON.", 400);
+      }
+      await repository.replaceCurrentCfpTeamOdds(body.seasonId, odds);
+      const run: CfpScrapeRun = {
+        seasonId: body.seasonId,
+        runId: `${capturedAt}#upload`,
+        sourceUrl: CFP_ODDS_UPLOAD_SOURCE,
+        capturedAt,
+        status: "success",
+        parsedTeamCount: odds.length,
+        errors: []
+      };
+      await repository.putCfpScrapeRun(run);
+      audit("cfp.odds.upload", auth, {
+        leagueId: body.leagueId,
+        seasonId: body.seasonId,
+        parsedTeamCount: odds.length
+      });
+      return json({ odds, run });
     }
 
     if (method === "POST" && path === "/admin/leagues") {
@@ -928,6 +1119,28 @@ async function requireLeagueAdmin(repository: PickemRepository, auth: AuthState,
   if (member?.role !== "league_admin") {
     throw new Error("Unauthorized.");
   }
+}
+
+async function canManageLeague(repository: PickemRepository, auth: AuthState, leagueId: string): Promise<boolean> {
+  if (auth.isSuperAdmin) {
+    return true;
+  }
+  return (await repository.getLeagueMember(leagueId, auth.userId))?.role === "league_admin";
+}
+
+function hydrateCfpAssignments(assignments: CfpAssignment[], odds: CfpTeamOdds[], members: LeagueMember[]) {
+  const currentByTeam = new Map(odds.map((item) => [item.teamKey, item]));
+  const memberLabels = new Map(members.map((member) => [member.userId, member.email ?? shortUserId(member.userId)]));
+  return assignments.map((assignment) => {
+    const current = currentByTeam.get(assignment.teamKey);
+    return {
+      ...assignment,
+      memberLabel: memberLabels.get(assignment.userId) ?? shortUserId(assignment.userId),
+      currentOdds: current?.americanOdds,
+      available: current?.available ?? false,
+      currentCapturedAt: current?.capturedAt
+    };
+  }).sort((a, b) => a.memberLabel.localeCompare(b.memberLabel) || a.teamName.localeCompare(b.teamName));
 }
 
 function requireSuperAdmin(auth: AuthState): void {
