@@ -261,7 +261,9 @@ export default function CfpPage() {
                   <h2 className="mb-3 text-2xl font-semibold">Manage Assignments</h2>
                   <div className="grid gap-3 md:grid-cols-2">
                     {members.map((member) => {
-                      const memberAssignments = assignments.filter((item) => item.userId === member.userId);
+                      const memberAssignments = assignments
+                        .filter((item) => item.userId === member.userId)
+                        .sort(compareCfpLikelihood);
                       return (
                         <MagicCard className="p-4" key={member.userId}>
                           <div className="font-semibold">{member.email ?? member.userId}</div>
@@ -323,7 +325,15 @@ function groupByMember(assignments: CfpAssignment[]): Array<[string, CfpAssignme
   for (const assignment of assignments) {
     groups.set(assignment.memberLabel, [...(groups.get(assignment.memberLabel) ?? []), assignment]);
   }
-  return [...groups.entries()].sort(([a], [b]) => a.localeCompare(b));
+  return [...groups.entries()]
+    .map(([memberLabel, rows]) => [memberLabel, [...rows].sort(compareCfpLikelihood)] as [string, CfpAssignment[]])
+    .sort(([a], [b]) => a.localeCompare(b));
+}
+
+function compareCfpLikelihood(a: CfpAssignment, b: CfpAssignment): number {
+  const aOdds = a.currentOdds ?? a.pickedOdds;
+  const bOdds = b.currentOdds ?? b.pickedOdds;
+  return aOdds - bOdds || a.teamName.localeCompare(b.teamName);
 }
 
 function ScrapeStatus({ run }: { run?: CfpScrapeRun }) {
