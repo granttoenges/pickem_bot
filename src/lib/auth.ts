@@ -126,6 +126,44 @@ export async function completeNewPassword(newPassword: string, email: string): P
   });
 }
 
+export async function requestPasswordReset(email: string): Promise<void> {
+  const user = new CognitoUser({ Username: email.trim(), Pool: getUserPool() });
+  return new Promise<void>((resolve, reject) => {
+    let settled = false;
+    const finish = () => {
+      if (!settled) {
+        settled = true;
+        resolve();
+      }
+    };
+    user.forgotPassword({
+      onSuccess: finish,
+      inputVerificationCode: finish,
+      onFailure: (error) => {
+        if (isPrivatePasswordResetRequestError(error)) {
+          finish();
+          return;
+        }
+        reject(error);
+      }
+    });
+  });
+}
+
+export async function confirmPasswordReset(email: string, code: string, newPassword: string): Promise<void> {
+  const user = new CognitoUser({ Username: email.trim(), Pool: getUserPool() });
+  return new Promise<void>((resolve, reject) => {
+    user.confirmPassword(code.trim(), newPassword, {
+      onSuccess: () => resolve(),
+      onFailure: reject
+    });
+  });
+}
+
+function isPrivatePasswordResetRequestError(error: Error): boolean {
+  return ["UserNotFoundException", "InvalidParameterException", "NotAuthorizedException"].includes(error.name);
+}
+
 function persistSession(session: CognitoUserSession, fallbackEmail: string): SessionState {
   const idToken = session.getIdToken().getJwtToken();
   const payload = session.getIdToken().decodePayload() as { email?: string; "cognito:groups"?: string[] };

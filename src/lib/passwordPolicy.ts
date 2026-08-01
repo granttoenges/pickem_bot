@@ -31,3 +31,33 @@ export function friendlyPasswordError(error: unknown): string {
   }
   return error instanceof Error ? error.message : "Could not set new password.";
 }
+
+export function passwordsMatch(password: string, confirmation: string): boolean {
+  return Boolean(password) && password === confirmation;
+}
+
+export function friendlyPasswordResetRequestError(error: unknown): string {
+  const name = error instanceof Error ? error.name : "";
+  if (name === "LimitExceededException" || name === "TooManyRequestsException") {
+    return "Too many reset attempts. Wait a few minutes and try again.";
+  }
+  return "Could not request a reset code. Check your connection and try again.";
+}
+
+export function friendlyPasswordResetError(error: unknown): string {
+  const name = error instanceof Error ? error.name : "";
+  if (name === "CodeMismatchException") {
+    return "That verification code is incorrect.";
+  }
+  if (name === "ExpiredCodeException") {
+    return "That verification code has expired. Request a new code and try again.";
+  }
+  if (name === "LimitExceededException" || name === "TooManyRequestsException") {
+    return "Too many reset attempts. Wait a few minutes and try again.";
+  }
+  const passwordMessage = friendlyPasswordError(error);
+  if (passwordMessage === "Password does not meet the requirements below.") {
+    return passwordMessage;
+  }
+  return "Could not reset password. Request a new code or check your connection and try again.";
+}

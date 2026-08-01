@@ -38,7 +38,7 @@ Only update active run2 resources unless the user explicitly says otherwise. Do 
 - Do not pass `GITHUB_PAT` on the command line.
 - The CDK stack references the named Secrets Manager secret instead of using a CloudFormation PAT parameter.
 - CDK must not create or manage real Cognito users. Use `npm run bootstrap:super-admin` for super admin creation/recovery.
-- Do not use `admin-reset-user-password` for the app login flow unless a reset-code UI has been implemented; use the temporary-password resend flow instead.
+- `/login` supports Cognito forgot-password verification codes for verified emails. Keep routine recovery self-service; use the temporary-password resend flow only for expired or interrupted initial invites.
 - `npm run build` may need elevated local port permissions in restricted Codex sandboxes because Next/Turbopack binds a helper port.
 
 ## Project Structure
@@ -46,7 +46,7 @@ Only update active run2 resources unless the user explicitly says otherwise. Do 
 - `src/app/`: Next.js app routes.
   - `page.tsx`: player board.
   - `admin/page.tsx`: admin console.
-  - `login/page.tsx`: Cognito login and password setup.
+  - `login/page.tsx`: Cognito login, invite-time password setup, and email-code password reset.
   - `standings/page.tsx`: standings view.
   - `cfp/page.tsx`: CFP tracker, assignment board, and authorized admin controls.
 - `src/components/`: shared UI components.

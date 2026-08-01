@@ -21,6 +21,7 @@ The app is built to run locally and deploy cheaply on AWS with serverless servic
   - league admins select exact board lines.
   - players respond `With` or `Against`.
 - Admin portal for league settings, invites, members, board-line selection, scraper status, and member removal.
+- Invite-only users can reset forgotten permanent passwords from `/login` with a Cognito email verification code.
 - Member removal deletes league-specific history and resets the Cognito user only when that user has no other league memberships.
 - DraftKings scraper stores shared weekly games and opening odds for all leagues.
 - Opening lines are immutable; later line movement does not overwrite the first stored line.
@@ -143,7 +144,9 @@ aws cognito-idp admin-add-user-to-group \
   --region us-east-1
 ```
 
-If the account already exists but the password is unknown, do not use `admin-reset-user-password`; that sends a verification-code flow the app does not currently support. Instead, put the user back into the temporary-password flow and resend the invite:
+Users who forget a permanent password should select **Forgot password?** on `/login`. Cognito sends a one-hour verification code to the account's verified email, and the app accepts that code with a policy-compliant new password. Request messaging does not reveal whether an account exists.
+
+Use the temporary-password recovery below only for an expired or interrupted initial invite, not for routine forgotten-password recovery:
 
 ```bash
 pw="Temp-$(openssl rand -base64 24 | tr -dc 'A-Za-z0-9!@#%^+=' | head -c 20)aA1!"
