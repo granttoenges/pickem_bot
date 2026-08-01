@@ -68,7 +68,7 @@ Scoring:
 
 Routes:
 
-- `/login`: Cognito login and new-password challenge.
+- `/login`: Cognito login, invite-time new-password challenge, and self-service email-code password reset.
 - `/`: player board with `Available Games`, `My Picks`, and `League Picks`.
 - `/admin`: league settings, invites, members, board-line selection, scraper status, proposed lines, and submitted responses.
 - `/standings`: league-scoped standings.
@@ -81,6 +81,8 @@ UI notes:
 - Dark mode follows system preference by default and can be set to `System`, `Light`, or `Dark` from the header; the preference is stored in browser `localStorage`.
 - Login stores Cognito tokens in `sessionStorage`, not `localStorage`.
 - New-password setup shows the current password policy before submit.
+- Forgot-password requests use Cognito directly, disclose no account-existence state, and never store reset emails, codes, or passwords in browser storage or application data.
+- Reset confirmation supports resend, code-expiration guidance, password confirmation, and the deployed password policy. Recovery codes use verified email only.
 
 ## Backend/API
 

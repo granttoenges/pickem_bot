@@ -5,7 +5,7 @@ import { Rule, Schedule } from "aws-cdk-lib/aws-events";
 import { LambdaFunction } from "aws-cdk-lib/aws-events-targets";
 import { Runtime } from "aws-cdk-lib/aws-lambda";
 import { NodejsFunction } from "aws-cdk-lib/aws-lambda-nodejs";
-import { UserPool, UserPoolClient, UserPoolClientIdentityProvider, UserPoolGroup } from "aws-cdk-lib/aws-cognito";
+import { AccountRecovery, UserPool, UserPoolClient, UserPoolClientIdentityProvider, UserPoolGroup } from "aws-cdk-lib/aws-cognito";
 import { CfnStage, HttpApi, CorsHttpMethod, HttpMethod } from "aws-cdk-lib/aws-apigatewayv2";
 import { HttpLambdaIntegration } from "aws-cdk-lib/aws-apigatewayv2-integrations";
 import { HttpUserPoolAuthorizer } from "aws-cdk-lib/aws-apigatewayv2-authorizers";
@@ -43,6 +43,7 @@ export class PickemStack extends Stack {
       userPoolName: `${resourcePrefix}-users`,
       selfSignUpEnabled: false,
       signInAliases: { email: true },
+      accountRecovery: AccountRecovery.EMAIL_ONLY,
       passwordPolicy: {
         minLength: 12,
         requireLowercase: true,
