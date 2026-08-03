@@ -39,6 +39,7 @@ Only update active run2 resources unless the user explicitly says otherwise. Do 
 - The CDK stack references the named Secrets Manager secret instead of using a CloudFormation PAT parameter.
 - CDK must not create or manage real Cognito users. Use `npm run bootstrap:super-admin` for super admin creation/recovery.
 - `/login` supports Cognito forgot-password verification codes for verified emails. Keep routine recovery self-service; use the temporary-password resend flow only for expired or interrupted initial invites.
+- Re-inviting an existing Cognito user in `FORCE_CHANGE_PASSWORD` must resend the activation invitation with a fresh temporary password; do not resend invitations to confirmed users.
 - `npm run build` may need elevated local port permissions in restricted Codex sandboxes because Next/Turbopack binds a helper port.
 
 ## Project Structure

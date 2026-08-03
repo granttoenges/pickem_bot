@@ -1,8 +1,6 @@
 import {
   AdminAddUserToGroupCommand,
-  AdminCreateUserCommand,
   AdminDeleteUserCommand,
-  AdminGetUserCommand,
   AdminListGroupsForUserCommand,
   CognitoIdentityProviderClient
 } from "@aws-sdk/client-cognito-identity-provider";
@@ -15,6 +13,7 @@ import { assertCanManuallyChangeProposalResponse, pickSummary, proposalSummary, 
 import { applyWeekSettings } from "./weekSettingsRules";
 import { assertCanRemoveLeagueMember } from "./memberRemovalRules";
 import { buildCfpAssignment, CFP_ODDS_UPLOAD_SOURCE, findAssignableCfpTeam, parseUploadedCfpOddsText } from "./cfpRules";
+import { ensureCognitoInvite } from "./cognitoInvite";
 import type { AppLeague, CfpAssignment, CfpScrapeRun, CfpSeasonConfig, CfpTeamOdds, Game, GameWithOptions, LeagueMember, LineProposal, PickOption, PlayerPick, ProposalResponse, Week } from "./types";
 
 const cognito = new CognitoIdentityProviderClient({});
@@ -630,9 +629,9 @@ export async function handler(event: APIGatewayProxyEventV2WithJWTAuthorizer): P
     if (method === "POST" && path === "/admin/invites") {
       const body = inviteSchema.parse(parseBody(event));
       await requireLeagueAdmin(repository, auth, body.leagueId);
-      const member = await invitePlayer(repository, body.leagueId, body.email);
-      audit("league.member.invite", auth, { leagueId: body.leagueId, email: body.email });
-      return json({ member }, 201);
+      const { member, invitationAction } = await invitePlayer(repository, body.leagueId, body.email);
+      audit("league.member.invite", auth, { leagueId: body.leagueId, email: body.email, invitationAction });
+      return json({ member, invitationAction }, 201);
     }
 
     if (method === "PUT" && path === "/picks") {
@@ -1149,28 +1148,13 @@ function requireSuperAdmin(auth: AuthState): void {
   }
 }
 
-async function invitePlayer(repository: PickemRepository, leagueId: string, email: string): Promise<LeagueMember> {
+async function invitePlayer(repository: PickemRepository, leagueId: string, email: string): Promise<{ member: LeagueMember; invitationAction: "created" | "resent" | "none" }> {
   const userPoolId = process.env.USER_POOL_ID;
   if (!userPoolId) {
     throw new Error("USER_POOL_ID is required for invites.");
   }
 
-  let userId: string | undefined;
-  try {
-    const existing = await cognito.send(new AdminGetUserCommand({ UserPoolId: userPoolId, Username: email }));
-    userId = existing.UserAttributes?.find((attribute) => attribute.Name === "sub")?.Value;
-  } catch {
-    const created = await cognito.send(new AdminCreateUserCommand({
-      UserPoolId: userPoolId,
-      Username: email,
-      DesiredDeliveryMediums: ["EMAIL"],
-      UserAttributes: [
-        { Name: "email", Value: email },
-        { Name: "email_verified", Value: "true" }
-      ]
-    }));
-    userId = created.User?.Attributes?.find((attribute) => attribute.Name === "sub")?.Value;
-  }
+  const { userId, invitationAction } = await ensureCognitoInvite(cognito, userPoolId, email);
 
   await cognito.send(new AdminAddUserToGroupCommand({
     UserPoolId: userPoolId,
@@ -1186,7 +1170,7 @@ async function invitePlayer(repository: PickemRepository, leagueId: string, emai
     createdAt: new Date().toISOString()
   };
   await repository.putLeagueMember(member);
-  return member;
+  return { member, invitationAction };
 }
 
 async function isCognitoSuperAdmin(email?: string): Promise<boolean> {

@@ -95,6 +95,9 @@ Core endpoints:
 - `PUT /admin/leagues/{leagueId}/members`
 - `DELETE /admin/leagues/{leagueId}/members`
 - `POST /admin/invites`
+  - Creates and emails a new Cognito user when the email is new.
+  - Re-sends the activation invitation with a fresh temporary password when the existing Cognito user is still in `FORCE_CHANGE_PASSWORD`.
+  - Adds an already-confirmed Cognito user to the league without sending another invitation.
 - `GET /weeks?leagueId=...&seasonId=...`
 - `GET /week?leagueId=...&seasonId=...&weekId=...`
 - `GET /admin/week?leagueId=...&seasonId=...&weekId=...`

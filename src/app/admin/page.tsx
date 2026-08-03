@@ -173,9 +173,13 @@ export default function AdminPage() {
     }
     setInvitingPlayer(true);
     try {
-      await apiSend("/admin/invites", "POST", { leagueId: activeLeagueId, email: inviteEmail });
+      const payload = await apiSend<{ invitationAction: "created" | "resent" | "none" }>("/admin/invites", "POST", { leagueId: activeLeagueId, email: inviteEmail });
       setInviteEmail("");
-      setStatus("Invite sent.");
+      setStatus(payload.invitationAction === "resent"
+        ? "Activation invite resent with a new temporary password."
+        : payload.invitationAction === "created"
+          ? "Invite sent."
+          : "Existing active user added to the league.");
       await load();
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Could not send invite.");

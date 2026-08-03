@@ -20,7 +20,7 @@ The app is built to run locally and deploy cheaply on AWS with serverless servic
 - Admin-selected mode:
   - league admins select exact board lines.
   - players respond `With` or `Against`.
-- Admin portal for league settings, invites, members, board-line selection, scraper status, and member removal.
+- Admin portal for league settings, invites, members, board-line selection, scraper status, and member removal. Re-inviting an unactivated user sends a fresh temporary password and restarts the three-day activation window.
 - Invite-only users can reset forgotten permanent passwords from `/login` with a Cognito email verification code.
 - Member removal deletes league-specific history and resets the Cognito user only when that user has no other league memberships.
 - DraftKings scraper stores shared weekly games and opening odds for all leagues.
